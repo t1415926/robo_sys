@@ -13,6 +13,10 @@ Visualization Manager:
       Enabled: true
       Name: Map
       Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
         Value: /map
     - Class: rviz_default_plugins/RobotModel
       Enabled: true
@@ -26,7 +30,31 @@ Visualization Manager:
       Enabled: true
       Name: Global Path
       Topic:
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
         Value: /plan
+    - Class: rviz_default_plugins/Map
+      Enabled: false
+      Name: Global Costmap
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /global_costmap/costmap
+      Alpha: 0.45
+    - Class: rviz_default_plugins/Map
+      Enabled: false
+      Name: Local Costmap
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /local_costmap/costmap
+      Alpha: 0.65
   Enabled: true
   Global Options:
     Fixed Frame: map

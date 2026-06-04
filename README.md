@@ -208,6 +208,24 @@ ros2 run tf2_tools view_frames
 5. RViz2 中能看到 2D 栅格地图和规划路径
 ```
 
+如果 RViz 显示 `No map received`，优先检查：
+
+```bash
+ros2 topic echo --once /map
+ros2 lifecycle get /map_server
+ros2 node list | grep -E 'map_server|planner_server|controller_server|bt_navigator'
+```
+
+正常情况下：
+
+```text
+/map 应该能 echo 到一帧 OccupancyGrid
+/map_server 应该是 active
+Nav2 相关节点应该存在
+```
+
+如果 `/map_server` 不是 active，查看启动终端里 `map_server` 的报错，通常是地图文件路径或地图图片格式问题。
+
 ## 当前版本边界
 
 当前版本刻意不实现：
