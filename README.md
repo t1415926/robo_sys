@@ -32,6 +32,12 @@ src/
 docs/git_workflow.md
 ```
 
+后续模块替代方向说明见：
+
+```text
+docs/nav2_replacement_roadmap.md
+```
+
 初版公共接口：
 
 | 话题 / TF | 说明 |
