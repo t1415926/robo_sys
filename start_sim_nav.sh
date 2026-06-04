@@ -18,6 +18,15 @@ die() {
   exit 1
 }
 
+source_ros_setup() {
+  local setup_file="$1"
+
+  set +u
+  # shellcheck source=/dev/null
+  source "${setup_file}"
+  set -u
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -76,8 +85,7 @@ unset PYTHONHOME
 unset PYTHONPATH
 export PATH="${SYSTEM_PATH}"
 
-# shellcheck source=/dev/null
-source "${ROS_SETUP}"
+source_ros_setup "${ROS_SETUP}"
 
 cd "${PROJECT_DIR}"
 
@@ -127,8 +135,7 @@ fi
 
 [[ -f "${PROJECT_DIR}/install/setup.bash" ]] || die "Missing install/setup.bash. Run with --build first."
 
-# shellcheck source=/dev/null
-source "${PROJECT_DIR}/install/setup.bash"
+source_ros_setup "${PROJECT_DIR}/install/setup.bash"
 
 log "Launching simulation navigation stack..."
 log "USE_RVIZ=${USE_RVIZ}"
