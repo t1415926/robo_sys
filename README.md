@@ -19,6 +19,12 @@ src/
 └── my_robot_bringup       # 一键启动仿真导航
 ```
 
+协作提交和推送说明见：
+
+```text
+docs/git_workflow.md
+```
+
 初版公共接口：
 
 | 话题 / TF | 说明 |
