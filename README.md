@@ -3,9 +3,9 @@
 本项目是 `ros2_humble_nav2_implementation_order.md` 的初步实现版本。当前版本不做 SLAM，不启动 AMCL，而是使用：
 
 ```text
-Gazebo Classic + ros2_control + diff_drive_controller
+简单 2D 全向底盘模拟 simple_omni_base_node
 静态简单地图 map_server
-仿真真值定位 sim_localization_node
+静态 map -> odom TF
 Nav2 全局规划和局部避障
 ```
 
@@ -21,8 +21,8 @@ src/my_robot_navigation/maps/simple_map.pgm
 ```text
 src/
 ├── my_robot_description   # 机器人 URDF / Xacro、RViz 模型显示
-├── my_robot_gazebo        # Gazebo world、ros2_control 控制器配置
-├── my_robot_navigation    # Nav2 参数、简单地图、仿真定位节点
+├── my_robot_gazebo        # 保留的 Gazebo 资源，当前默认启动不使用
+├── my_robot_navigation    # Nav2 参数、简单地图、全向底盘模拟节点
 └── my_robot_bringup       # 一键启动仿真导航
 ```
 
@@ -37,10 +37,11 @@ docs/git_workflow.md
 | 话题 / TF | 说明 |
 |---|---|
 | `/cmd_vel` | Nav2 输出速度指令 |
-| `/odom` | 桥接后的标准里程计 |
+| `/odom` | 全向底盘模拟节点发布的里程计 |
 | `/map` | 静态模拟地图 |
-| `map -> odom` | 仿真真值定位节点发布 |
-| `odom -> base_footprint` | diff_drive_controller 发布 |
+| `/plan` | Nav2 全局规划路径，RViz 中显示为 Global Path |
+| `map -> odom` | 静态 TF |
+| `odom -> base_footprint` | simple_omni_base_node 发布 |
 
 ## 运行前依赖
 
@@ -59,12 +60,9 @@ sudo apt update
 sudo apt install \
   ros-humble-navigation2 \
   ros-humble-nav2-bringup \
-  ros-humble-gazebo-ros-pkgs \
-  ros-humble-gazebo-ros2-control \
-  ros-humble-ros2-control \
-  ros-humble-ros2-controllers \
   ros-humble-xacro \
-  ros-humble-joint-state-publisher \
+  ros-humble-robot-state-publisher \
+  ros-humble-tf2-ros \
   ros-humble-teleop-twist-keyboard
 ```
 
@@ -133,20 +131,19 @@ ros2 launch my_robot_bringup sim_bringup.launch.py
 启动后会打开：
 
 ```text
-1. Gazebo 简单障碍物世界
-2. 自定义差速机器人
-3. ros2_control 差速控制器
+1. simple_omni_base_node 简单全向底盘模拟
+2. robot_state_publisher 发布机器人模型
+3. 静态 map -> odom TF
 4. /map 简单 2D 栅格地图
-5. sim_localization_node 仿真真值定位
-6. Nav2 路径规划和控制
-7. RViz2
+5. Nav2 路径规划和控制
+6. RViz2
 ```
 
 ## 在 RViz2 中使用
 
 RViz2 的 Fixed Frame 已设置为 `map`。
 
-由于当前使用仿真真值定位，不需要点击 `2D Pose Estimate`。直接点击 `Nav2 Goal`，在地图空白区域设置目标点即可。
+由于当前使用静态 `map -> odom` 加全向底盘里程计，不需要点击 `2D Pose Estimate`。直接点击 `Nav2 Goal`，在地图空白区域设置目标点即可。
 
 Nav2 会根据 `simple_map.pgm` 中的障碍物占据栅格自动规划路径，并控制机器人到达目标点。
 
@@ -196,7 +193,7 @@ source install/setup.bash
 ros2 run teleop_twist_keyboard teleop_twist_keyboard
 ```
 
-键盘控制会发布 `/cmd_vel`，桥接节点会转发到 diff_drive_controller。
+键盘控制会发布 `/cmd_vel`，simple_omni_base_node 会直接积分 x、y 和 yaw 速度并更新 `/odom`。
 
 ## 常用检查命令
 
@@ -273,7 +270,7 @@ Couldn't load critics! Caught exception: No critics defined for FollowPath
 
 ```text
 1. 先把当前仿真导航跑稳
-2. 用 AMCL 替换 sim_localization_node
+2. 后续需要更真实定位时，再加入 AMCL 或仿真真值定位
 3. 再加入 slam_toolbox 建图
 4. 最后接入真实底盘 base_driver_node 和真实雷达
 ```

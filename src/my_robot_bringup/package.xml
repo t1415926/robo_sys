@@ -2,14 +2,16 @@
 <package format="3">
   <name>my_robot_bringup</name>
   <version>0.1.0</version>
-  <description>Unified launch entry points for the initial simulation navigation stack.</description>
+  <description>Unified launch entry points for the simple 2D omni simulation navigation stack.</description>
   <maintainer email="dtc@example.com">dtc</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <exec_depend>my_robot_gazebo</exec_depend>
+  <exec_depend>my_robot_description</exec_depend>
   <exec_depend>my_robot_navigation</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

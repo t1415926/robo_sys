@@ -131,13 +131,13 @@ check_runtime_package() {
   fi
 }
 
-check_runtime_package gazebo_ros
-check_runtime_package gazebo_ros2_control
 check_runtime_package nav2_map_server
 check_runtime_package nav2_planner
 check_runtime_package nav2_controller
 check_runtime_package nav2_bt_navigator
 check_runtime_package nav2_msgs
+check_runtime_package robot_state_publisher
+check_runtime_package tf2_ros
 check_runtime_package xacro
 
 need_build=false

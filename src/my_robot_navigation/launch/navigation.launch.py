@@ -2,9 +2,8 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.conditions import IfCondition
-from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -33,21 +32,6 @@ def launch_setup(context, *args, **kwargs):
     if not os.path.isfile(params_file):
         raise RuntimeError(f'Nav2 params file does not exist: {params_file}')
 
-    sim_localization = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare('my_robot_navigation'),
-                'launch',
-                'sim_localization.launch.py',
-            ])
-        ]),
-        launch_arguments={
-            'use_sim_time': str(use_sim_time).lower(),
-            'ground_truth_topic': '/ground_truth/odom',
-            'odom_topic': '/odom',
-        }.items(),
-    )
-
     lifecycle_nodes = [
         'map_server',
         'planner_server',
@@ -59,7 +43,6 @@ def launch_setup(context, *args, **kwargs):
     nav2_params = [params_file, {'use_sim_time': use_sim_time}]
 
     return [
-        sim_localization,
         Node(
             package='nav2_map_server',
             executable='map_server',
@@ -143,7 +126,7 @@ def generate_launch_description():
     navigation_dir = get_package_share_directory('my_robot_navigation')
 
     return LaunchDescription([
-        DeclareLaunchArgument('use_sim_time', default_value='true'),
+        DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument(
             'map',
             default_value=os.path.join(navigation_dir, 'maps', 'simple_map.yaml'),
