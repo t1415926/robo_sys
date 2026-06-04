@@ -211,7 +211,7 @@ ros2 run tf2_tools view_frames
 如果 RViz 显示 `No map received`，优先检查：
 
 ```bash
-ros2 topic echo --once /map
+ros2 topic echo --once --qos-durability transient_local /map
 ros2 lifecycle get /map_server
 ros2 node list | grep -E 'map_server|planner_server|controller_server|bt_navigator'
 ```
@@ -225,6 +225,28 @@ Nav2 相关节点应该存在
 ```
 
 如果 `/map_server` 不是 active，查看启动终端里 `map_server` 的报错，通常是地图文件路径或地图图片格式问题。
+
+注意：
+
+```text
+1. /map 是静态地图，通常只发布一次，不要用 ros2 topic hz /map 判断是否正常。
+2. lifecycle 节点名是 /map_server，不是 /map_serverer。
+3. 如果 controller_server 配置失败，lifecycle_manager 会中断后续激活，/map_server 也可能停在 inactive。
+```
+
+如果看到类似下面的错误：
+
+```text
+Couldn't load critics! Caught exception: No critics defined for FollowPath
+```
+
+说明 Nav2 参数没有按预期加载。先执行：
+
+```bash
+./start_sim_nav.sh --build
+```
+
+新版脚本会在检测到 `src/` 源码比 `install/setup.bash` 更新时自动重新编译，避免继续使用旧的 install 配置。
 
 ## 当前版本边界
 

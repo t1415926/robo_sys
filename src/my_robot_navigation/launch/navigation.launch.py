@@ -1,13 +1,20 @@
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.descriptions import ParameterFile
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from nav2_common.launch import RewrittenYaml
 
 
 def generate_launch_description():
+    navigation_dir = get_package_share_directory('my_robot_navigation')
+
     use_sim_time = LaunchConfiguration('use_sim_time')
     map_file = LaunchConfiguration('map')
     params_file = LaunchConfiguration('params_file')
@@ -40,23 +47,28 @@ def generate_launch_description():
         'bt_navigator',
     ]
 
+    configured_params = ParameterFile(
+        RewrittenYaml(
+            source_file=params_file,
+            root_key='',
+            param_rewrites={
+                'use_sim_time': use_sim_time,
+                'yaml_filename': map_file,
+            },
+            convert_types=True,
+        ),
+        allow_substs=True,
+    )
+
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
         DeclareLaunchArgument(
             'map',
-            default_value=PathJoinSubstitution([
-                FindPackageShare('my_robot_navigation'),
-                'maps',
-                'simple_map.yaml',
-            ]),
+            default_value=os.path.join(navigation_dir, 'maps', 'simple_map.yaml'),
         ),
         DeclareLaunchArgument(
             'params_file',
-            default_value=PathJoinSubstitution([
-                FindPackageShare('my_robot_navigation'),
-                'config',
-                'nav2_params.yaml',
-            ]),
+            default_value=os.path.join(navigation_dir, 'config', 'nav2_params.yaml'),
         ),
         DeclareLaunchArgument('use_rviz', default_value='true'),
         DeclareLaunchArgument('auto_goal', default_value='false'),
@@ -69,35 +81,35 @@ def generate_launch_description():
             executable='map_server',
             name='map_server',
             output='screen',
-            parameters=[params_file, {'use_sim_time': use_sim_time, 'yaml_filename': map_file}],
+            parameters=[configured_params],
         ),
         Node(
             package='nav2_planner',
             executable='planner_server',
             name='planner_server',
             output='screen',
-            parameters=[params_file, {'use_sim_time': use_sim_time}],
+            parameters=[configured_params],
         ),
         Node(
             package='nav2_controller',
             executable='controller_server',
             name='controller_server',
             output='screen',
-            parameters=[params_file, {'use_sim_time': use_sim_time}],
+            parameters=[configured_params],
         ),
         Node(
             package='nav2_behaviors',
             executable='behavior_server',
             name='behavior_server',
             output='screen',
-            parameters=[params_file, {'use_sim_time': use_sim_time}],
+            parameters=[configured_params],
         ),
         Node(
             package='nav2_bt_navigator',
             executable='bt_navigator',
             name='bt_navigator',
             output='screen',
-            parameters=[params_file, {'use_sim_time': use_sim_time}],
+            parameters=[configured_params],
         ),
         Node(
             package='nav2_lifecycle_manager',

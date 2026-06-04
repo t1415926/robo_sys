@@ -31,6 +31,15 @@ source_ros_setup() {
   set -u
 }
 
+workspace_sources_changed() {
+  [[ -f "${PROJECT_DIR}/install/setup.bash" ]] || return 0
+
+  local changed
+  changed="$(find "${PROJECT_DIR}/src" "${PROJECT_DIR}/start_sim_nav.sh" \
+    -type f -newer "${PROJECT_DIR}/install/setup.bash" -print -quit)"
+  [[ -n "${changed}" ]]
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -135,6 +144,9 @@ need_build=false
 case "${BUILD_MODE}" in
   auto)
     if [[ ! -f "${PROJECT_DIR}/install/setup.bash" ]]; then
+      need_build=true
+    elif workspace_sources_changed; then
+      log "Detected source changes newer than install/setup.bash."
       need_build=true
     fi
     ;;
