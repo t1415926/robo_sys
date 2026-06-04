@@ -1,0 +1,121 @@
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
+
+
+def generate_launch_description():
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    map_file = LaunchConfiguration('map')
+    params_file = LaunchConfiguration('params_file')
+    use_rviz = LaunchConfiguration('use_rviz')
+
+    sim_localization = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('my_robot_navigation'),
+                'launch',
+                'sim_localization.launch.py',
+            ])
+        ]),
+        launch_arguments={
+            'use_sim_time': use_sim_time,
+            'ground_truth_topic': '/ground_truth/odom',
+            'odom_topic': '/odom',
+        }.items(),
+    )
+
+    lifecycle_nodes = [
+        'map_server',
+        'planner_server',
+        'controller_server',
+        'behavior_server',
+        'bt_navigator',
+    ]
+
+    return LaunchDescription([
+        DeclareLaunchArgument('use_sim_time', default_value='true'),
+        DeclareLaunchArgument(
+            'map',
+            default_value=PathJoinSubstitution([
+                FindPackageShare('my_robot_navigation'),
+                'maps',
+                'simple_map.yaml',
+            ]),
+        ),
+        DeclareLaunchArgument(
+            'params_file',
+            default_value=PathJoinSubstitution([
+                FindPackageShare('my_robot_navigation'),
+                'config',
+                'nav2_params.yaml',
+            ]),
+        ),
+        DeclareLaunchArgument('use_rviz', default_value='true'),
+        sim_localization,
+        Node(
+            package='nav2_map_server',
+            executable='map_server',
+            name='map_server',
+            output='screen',
+            parameters=[params_file, {'use_sim_time': use_sim_time, 'yaml_filename': map_file}],
+        ),
+        Node(
+            package='nav2_planner',
+            executable='planner_server',
+            name='planner_server',
+            output='screen',
+            parameters=[params_file, {'use_sim_time': use_sim_time}],
+        ),
+        Node(
+            package='nav2_controller',
+            executable='controller_server',
+            name='controller_server',
+            output='screen',
+            parameters=[params_file, {'use_sim_time': use_sim_time}],
+        ),
+        Node(
+            package='nav2_behaviors',
+            executable='behavior_server',
+            name='behavior_server',
+            output='screen',
+            parameters=[params_file, {'use_sim_time': use_sim_time}],
+        ),
+        Node(
+            package='nav2_bt_navigator',
+            executable='bt_navigator',
+            name='bt_navigator',
+            output='screen',
+            parameters=[params_file, {'use_sim_time': use_sim_time}],
+        ),
+        Node(
+            package='nav2_lifecycle_manager',
+            executable='lifecycle_manager',
+            name='lifecycle_manager_navigation',
+            output='screen',
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'autostart': True,
+                'node_names': lifecycle_nodes,
+            }],
+        ),
+        Node(
+            condition=IfCondition(use_rviz),
+            package='rviz2',
+            executable='rviz2',
+            name='rviz2',
+            output='screen',
+            arguments=[
+                '-d',
+                PathJoinSubstitution([
+                    FindPackageShare('my_robot_navigation'),
+                    'rviz',
+                    'nav2_sim.rviz',
+                ]),
+            ],
+            parameters=[{'use_sim_time': use_sim_time}],
+        ),
+    ])

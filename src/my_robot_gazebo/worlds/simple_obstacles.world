@@ -1,0 +1,119 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <world name="simple_obstacles">
+    <plugin name="gazebo_ros_init" filename="libgazebo_ros_init.so"/>
+    <plugin name="gazebo_ros_factory" filename="libgazebo_ros_factory.so"/>
+
+    <gravity>0 0 -9.8</gravity>
+
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+
+    <include>
+      <uri>model://sun</uri>
+    </include>
+
+    <model name="box_obstacle_1">
+      <static>true</static>
+      <pose>1.5 0.0 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.5 0.5 0.5</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.5 0.5 0.5</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.8 0.2 0.1 1</ambient>
+            <diffuse>0.8 0.2 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="box_obstacle_2">
+      <static>true</static>
+      <pose>0.2 1.2 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.4 0.8 0.5</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.4 0.8 0.5</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.55 0.2 1</ambient>
+            <diffuse>0.2 0.55 0.2 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="cylinder_obstacle_1">
+      <static>true</static>
+      <pose>-1.2 -0.9 0.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.25</radius>
+              <length>0.5</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.25</radius>
+              <length>0.5</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.1 0.3 0.85 1</ambient>
+            <diffuse>0.1 0.3 0.85 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="box_obstacle_3">
+      <static>true</static>
+      <pose>-1.8 1.1 0.25 0 0 0.5</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.35 0.9 0.5</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.35 0.9 0.5</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.75 0.55 0.1 1</ambient>
+            <diffuse>0.75 0.55 0.1 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>
