@@ -21,7 +21,7 @@ src/my_robot_navigation/maps/simple_map.pgm
 ```text
 src/
 ├── my_robot_description   # 机器人 URDF / Xacro、RViz 模型显示
-├── my_robot_gazebo        # 保留的 Gazebo 资源，当前默认启动不使用
+├── my_robot_gazebo        # Gazebo world、Gazebo 全向底盘模拟节点
 ├── my_robot_navigation    # Nav2 参数、简单地图、全向底盘模拟节点
 └── my_robot_bringup       # 一键启动仿真导航
 ```
@@ -72,6 +72,13 @@ sudo apt install \
   ros-humble-teleop-twist-keyboard
 ```
 
+如果需要启动 Gazebo 全向底盘仿真，还需要安装：
+
+```bash
+sudo apt install \
+  ros-humble-gazebo-ros-pkgs
+```
+
 ## 编译
 
 在项目根目录执行：
@@ -93,7 +100,7 @@ env -u PYTHONPATH -u PYTHONHOME \
 source install/setup.bash
 ```
 
-## 启动完整仿真导航
+## 启动轻量 2D 仿真导航
 
 推荐使用一键启动脚本：
 
@@ -143,6 +150,47 @@ ros2 launch my_robot_bringup sim_bringup.launch.py
 4. /map 简单 2D 栅格地图
 5. Nav2 路径规划和控制
 6. RViz2
+```
+
+## 启动 Gazebo 全向底盘导航
+
+Gazebo 版本使用同一套 Nav2、同一张 2D 地图和同一个 RViz 配置，但底盘由 Gazebo 中的全向模型显示和运动。
+
+```bash
+cd /home/dtc/robo_sys
+./start_gazebo_omni_nav.sh --build
+```
+
+不启动 RViz2：
+
+```bash
+./start_gazebo_omni_nav.sh --no-rviz
+```
+
+启动后自动发送目标点：
+
+```bash
+./start_gazebo_omni_nav.sh --goal 1.0 -1.0 0.0
+```
+
+Gazebo 全向版链路：
+
+```text
+Nav2 /cmd_vel
+        ↓
+gazebo_omni_base_node
+        ↓
+Gazebo simple_omni_robot 模型位姿
+        ↓
+/odom + odom -> base_footprint
+```
+
+这个版本不使用 `diff_drive_controller`，也不使用 `ros2_control`。它直接支持：
+
+```text
+linear.x
+linear.y
+angular.z
 ```
 
 ## 在 RViz2 中使用

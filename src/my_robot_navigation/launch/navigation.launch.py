@@ -1,4 +1,5 @@
 import os
+import tempfile
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -7,10 +8,39 @@ from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+import yaml
 
 
 def as_bool(value):
     return str(value).lower() in ('1', 'true', 'yes', 'on')
+
+
+def replace_use_sim_time(value, use_sim_time):
+    if isinstance(value, dict):
+        return {
+            key: use_sim_time if key == 'use_sim_time' else replace_use_sim_time(item, use_sim_time)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [replace_use_sim_time(item, use_sim_time) for item in value]
+    return value
+
+
+def make_configured_params_file(params_file, use_sim_time):
+    with open(params_file, 'r', encoding='utf-8') as stream:
+        params = yaml.safe_load(stream)
+
+    params = replace_use_sim_time(params, use_sim_time)
+    configured = tempfile.NamedTemporaryFile(
+        mode='w',
+        prefix='nav2_params_',
+        suffix='.yaml',
+        delete=False,
+        encoding='utf-8',
+    )
+    with configured:
+        yaml.safe_dump(params, configured, sort_keys=False)
+    return configured.name
 
 
 def launch_setup(context, *args, **kwargs):
@@ -32,6 +62,8 @@ def launch_setup(context, *args, **kwargs):
     if not os.path.isfile(params_file):
         raise RuntimeError(f'Nav2 params file does not exist: {params_file}')
 
+    configured_params_file = make_configured_params_file(params_file, use_sim_time)
+
     lifecycle_nodes = [
         'map_server',
         'planner_server',
@@ -40,7 +72,7 @@ def launch_setup(context, *args, **kwargs):
         'bt_navigator',
     ]
 
-    nav2_params = [params_file, {'use_sim_time': use_sim_time}]
+    nav2_params = [configured_params_file, {'use_sim_time': use_sim_time}]
 
     return [
         Node(
@@ -48,7 +80,10 @@ def launch_setup(context, *args, **kwargs):
             executable='map_server',
             name='map_server',
             output='screen',
-            parameters=[params_file, {'use_sim_time': use_sim_time, 'yaml_filename': map_file}],
+            parameters=[
+                configured_params_file,
+                {'use_sim_time': use_sim_time, 'yaml_filename': map_file},
+            ],
         ),
         Node(
             package='nav2_planner',
