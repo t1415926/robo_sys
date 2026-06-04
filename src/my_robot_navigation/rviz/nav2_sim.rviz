@@ -27,18 +27,6 @@ Visualization Manager:
       Name: Global Path
       Topic:
         Value: /plan
-    - Class: rviz_default_plugins/Map
-      Enabled: true
-      Name: Global Costmap
-      Topic:
-        Value: /global_costmap/costmap
-      Alpha: 0.45
-    - Class: rviz_default_plugins/Map
-      Enabled: true
-      Name: Local Costmap
-      Topic:
-        Value: /local_costmap/costmap
-      Alpha: 0.65
   Enabled: true
   Global Options:
     Fixed Frame: map

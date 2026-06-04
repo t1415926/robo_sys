@@ -150,6 +150,17 @@ RViz2 的 Fixed Frame 已设置为 `map`。
 
 Nav2 会根据 `simple_map.pgm` 中的障碍物占据栅格自动规划路径，并控制机器人到达目标点。
 
+当前 RViz 默认只显示：
+
+```text
+1. 2D 栅格地图 /map
+2. 机器人模型
+3. TF
+4. 全局路径 /plan
+```
+
+`Global Costmap` 和 `Local Costmap` 显示层默认不打开。当前版本主要依据保存好的 2D 地图规划，先不把 costmap 图层作为观察重点。
+
 推荐先设置短距离目标，例如：
 
 ```text
