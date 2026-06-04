@@ -9,6 +9,13 @@ Gazebo Classic + ros2_control + diff_drive_controller
 Nav2 全局规划和局部避障
 ```
 
+当前版本不使用雷达模拟，不订阅 `/scan`。路径规划和避障依据已保存的 2D 栅格地图：
+
+```text
+src/my_robot_navigation/maps/simple_map.yaml
+src/my_robot_navigation/maps/simple_map.pgm
+```
+
 ## 当前实现内容
 
 ```text
@@ -31,7 +38,6 @@ docs/git_workflow.md
 |---|---|
 | `/cmd_vel` | Nav2 输出速度指令 |
 | `/odom` | 桥接后的标准里程计 |
-| `/scan` | Gazebo 2D 雷达 |
 | `/map` | 静态模拟地图 |
 | `map -> odom` | 仿真真值定位节点发布 |
 | `odom -> base_footprint` | diff_drive_controller 发布 |
@@ -104,6 +110,20 @@ cd /home/dtc/robo_sys
 ./start_sim_nav.sh --build
 ```
 
+启动后自动发送目标点：
+
+```bash
+./start_sim_nav.sh --goal 2.2 1.8 0.0
+```
+
+参数含义：
+
+```text
+2.2 = 目标点 x，单位 m，map 坐标系
+1.8 = 目标点 y，单位 m，map 坐标系
+0.0 = 目标朝向 yaw，单位 rad，可省略
+```
+
 也可以手动启动：
 
 ```bash
@@ -116,11 +136,10 @@ ros2 launch my_robot_bringup sim_bringup.launch.py
 1. Gazebo 简单障碍物世界
 2. 自定义差速机器人
 3. ros2_control 差速控制器
-4. /scan 仿真雷达
-5. /map 简单模拟地图
-6. sim_localization_node 仿真真值定位
-7. Nav2
-8. RViz2
+4. /map 简单 2D 栅格地图
+5. sim_localization_node 仿真真值定位
+6. Nav2 路径规划和控制
+7. RViz2
 ```
 
 ## 在 RViz2 中使用
@@ -128,6 +147,8 @@ ros2 launch my_robot_bringup sim_bringup.launch.py
 RViz2 的 Fixed Frame 已设置为 `map`。
 
 由于当前使用仿真真值定位，不需要点击 `2D Pose Estimate`。直接点击 `Nav2 Goal`，在地图空白区域设置目标点即可。
+
+Nav2 会根据 `simple_map.pgm` 中的障碍物占据栅格自动规划路径，并控制机器人到达目标点。
 
 推荐先设置短距离目标，例如：
 
@@ -162,7 +183,6 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard
 ros2 topic list
 ros2 topic echo /cmd_vel
 ros2 topic echo /odom
-ros2 topic echo /scan
 ros2 topic echo /map
 ros2 run tf2_tools view_frames
 ```
@@ -170,11 +190,11 @@ ros2 run tf2_tools view_frames
 重点确认：
 
 ```text
-1. /scan 有数据
-2. /odom 有数据
-3. /map 有数据
-4. TF 中存在 map -> odom -> base_footprint -> base_link -> lidar_link
-5. Nav2 lifecycle 节点处于 active
+1. /odom 有数据
+2. /map 有数据
+3. TF 中存在 map -> odom -> base_footprint -> base_link
+4. Nav2 lifecycle 节点处于 active
+5. RViz2 中能看到 2D 栅格地图和规划路径
 ```
 
 ## 当前版本边界

@@ -19,12 +19,6 @@ Visualization Manager:
       Name: RobotModel
       Description Topic:
         Value: /robot_description
-    - Class: rviz_default_plugins/LaserScan
-      Enabled: true
-      Name: LaserScan
-      Topic:
-        Value: /scan
-      Size (m): 0.04
     - Class: rviz_default_plugins/TF
       Enabled: true
       Name: TF

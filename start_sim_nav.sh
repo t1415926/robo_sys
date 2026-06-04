@@ -6,6 +6,10 @@ ROS_DISTRO="${ROS_DISTRO:-humble}"
 ROS_SETUP="/opt/ros/${ROS_DISTRO}/setup.bash"
 USE_RVIZ="${USE_RVIZ:-true}"
 BUILD_MODE="${BUILD_MODE:-auto}"
+AUTO_GOAL="${AUTO_GOAL:-false}"
+GOAL_X="${GOAL_X:-2.2}"
+GOAL_Y="${GOAL_Y:-1.8}"
+GOAL_YAW="${GOAL_YAW:-0.0}"
 
 SYSTEM_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
@@ -36,16 +40,22 @@ Options:
   --no-rviz        Do not start RViz2.
   --build          Always rebuild before launch.
   --no-build       Do not build, only source install/setup.bash and launch.
+  --goal X Y [YAW] Automatically send a Nav2 goal in the 2D map frame.
   -h, --help       Show this help.
 
 Environment:
   ROS_DISTRO       ROS distro name. Default: humble
   USE_RVIZ         true or false. Default: true
   BUILD_MODE       auto, always, or never. Default: auto
+  AUTO_GOAL        true or false. Default: false
+  GOAL_X           Goal x in map frame. Default: 2.2
+  GOAL_Y           Goal y in map frame. Default: 1.8
+  GOAL_YAW         Goal yaw in radians. Default: 0.0
 
 Examples:
   ./start_sim_nav.sh
   ./start_sim_nav.sh --no-rviz
+  ./start_sim_nav.sh --goal 2.2 1.8 0.0
   BUILD_MODE=always ./start_sim_nav.sh
 EOF
 }
@@ -63,6 +73,18 @@ while [[ $# -gt 0 ]]; do
     --no-build)
       BUILD_MODE=never
       shift
+      ;;
+    --goal)
+      [[ $# -ge 3 ]] || die "--goal requires X and Y, with optional YAW."
+      AUTO_GOAL=true
+      GOAL_X="$2"
+      GOAL_Y="$3"
+      if [[ $# -ge 4 && "$4" != --* ]]; then
+        GOAL_YAW="$4"
+        shift 4
+      else
+        shift 3
+      fi
       ;;
     -h|--help)
       usage
@@ -106,6 +128,7 @@ check_runtime_package nav2_map_server
 check_runtime_package nav2_planner
 check_runtime_package nav2_controller
 check_runtime_package nav2_bt_navigator
+check_runtime_package nav2_msgs
 check_runtime_package xacro
 
 need_build=false
@@ -139,4 +162,10 @@ source_ros_setup "${PROJECT_DIR}/install/setup.bash"
 
 log "Launching simulation navigation stack..."
 log "USE_RVIZ=${USE_RVIZ}"
-exec ros2 launch my_robot_bringup sim_bringup.launch.py use_rviz:="${USE_RVIZ}"
+log "AUTO_GOAL=${AUTO_GOAL} GOAL_X=${GOAL_X} GOAL_Y=${GOAL_Y} GOAL_YAW=${GOAL_YAW}"
+exec ros2 launch my_robot_bringup sim_bringup.launch.py \
+  use_rviz:="${USE_RVIZ}" \
+  auto_goal:="${AUTO_GOAL}" \
+  goal_x:="${GOAL_X}" \
+  goal_y:="${GOAL_Y}" \
+  goal_yaw:="${GOAL_YAW}"

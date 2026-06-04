@@ -12,6 +12,10 @@ def generate_launch_description():
     map_file = LaunchConfiguration('map')
     params_file = LaunchConfiguration('params_file')
     use_rviz = LaunchConfiguration('use_rviz')
+    auto_goal = LaunchConfiguration('auto_goal')
+    goal_x = LaunchConfiguration('goal_x')
+    goal_y = LaunchConfiguration('goal_y')
+    goal_yaw = LaunchConfiguration('goal_yaw')
 
     sim_localization = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
@@ -55,6 +59,10 @@ def generate_launch_description():
             ]),
         ),
         DeclareLaunchArgument('use_rviz', default_value='true'),
+        DeclareLaunchArgument('auto_goal', default_value='false'),
+        DeclareLaunchArgument('goal_x', default_value='2.2'),
+        DeclareLaunchArgument('goal_y', default_value='1.8'),
+        DeclareLaunchArgument('goal_yaw', default_value='0.0'),
         sim_localization,
         Node(
             package='nav2_map_server',
@@ -117,5 +125,19 @@ def generate_launch_description():
                 ]),
             ],
             parameters=[{'use_sim_time': use_sim_time}],
+        ),
+        Node(
+            condition=IfCondition(auto_goal),
+            package='my_robot_navigation',
+            executable='send_goal_node.py',
+            name='send_goal_node',
+            output='screen',
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'goal_x': goal_x,
+                'goal_y': goal_y,
+                'goal_yaw': goal_yaw,
+                'delay_sec': 8.0,
+            }],
         ),
     ])
