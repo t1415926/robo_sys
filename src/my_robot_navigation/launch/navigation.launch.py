@@ -15,9 +15,13 @@ def as_bool(value):
 
 
 def launch_setup(context, *args, **kwargs):
+    navigation_dir = get_package_share_directory('my_robot_navigation')
+    default_map_file = os.path.join(navigation_dir, 'maps', 'simple_map.yaml')
+    default_params_file = os.path.join(navigation_dir, 'config', 'nav2_params.yaml')
+
     use_sim_time = as_bool(LaunchConfiguration('use_sim_time').perform(context))
-    map_file = LaunchConfiguration('map').perform(context)
-    params_file = LaunchConfiguration('params_file').perform(context)
+    map_file = LaunchConfiguration('map').perform(context) or default_map_file
+    params_file = LaunchConfiguration('params_file').perform(context) or default_params_file
     use_rviz = LaunchConfiguration('use_rviz')
     auto_goal = LaunchConfiguration('auto_goal')
     goal_x = LaunchConfiguration('goal_x').perform(context)

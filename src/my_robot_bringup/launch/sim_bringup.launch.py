@@ -39,6 +39,16 @@ def generate_launch_description():
             'goal_x': goal_x,
             'goal_y': goal_y,
             'goal_yaw': goal_yaw,
+            'map': PathJoinSubstitution([
+                FindPackageShare('my_robot_navigation'),
+                'maps',
+                'simple_map.yaml',
+            ]),
+            'params_file': PathJoinSubstitution([
+                FindPackageShare('my_robot_navigation'),
+                'config',
+                'nav2_params.yaml',
+            ]),
         }.items(),
     )
 
