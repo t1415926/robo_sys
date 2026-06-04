@@ -24,6 +24,7 @@ class SendGoalNode(Node):
 
         self.client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         self.sent = False
+        self.last_feedback_log_time = 0.0
         self.timer = self.create_timer(0.5, self.try_send_goal)
         self.start_time = time.monotonic()
 
@@ -61,6 +62,11 @@ class SendGoalNode(Node):
         self.sent = True
 
     def feedback_callback(self, feedback_msg):
+        now = time.monotonic()
+        if now - self.last_feedback_log_time < 1.0:
+            return
+        self.last_feedback_log_time = now
+
         feedback = feedback_msg.feedback
         distance = feedback.distance_remaining
         self.get_logger().info(f'Distance remaining: {distance:.2f} m')
