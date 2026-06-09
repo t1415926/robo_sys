@@ -51,13 +51,14 @@ def launch_setup(context, *args, **kwargs):
     use_sim_time = as_bool(LaunchConfiguration('use_sim_time').perform(context))
     map_file = LaunchConfiguration('map').perform(context) or default_map_file
     params_file = LaunchConfiguration('params_file').perform(context) or default_params_file
+    use_map_server = as_bool(LaunchConfiguration('use_map_server').perform(context))
     use_rviz = LaunchConfiguration('use_rviz')
     auto_goal = LaunchConfiguration('auto_goal')
     goal_x = LaunchConfiguration('goal_x').perform(context)
     goal_y = LaunchConfiguration('goal_y').perform(context)
     goal_yaw = LaunchConfiguration('goal_yaw').perform(context)
 
-    if not os.path.isfile(map_file):
+    if use_map_server and not os.path.isfile(map_file):
         raise RuntimeError(f'Map file does not exist: {map_file}')
     if not os.path.isfile(params_file):
         raise RuntimeError(f'Nav2 params file does not exist: {params_file}')
@@ -65,16 +66,17 @@ def launch_setup(context, *args, **kwargs):
     configured_params_file = make_configured_params_file(params_file, use_sim_time)
 
     lifecycle_nodes = [
-        'map_server',
         'planner_server',
         'controller_server',
         'behavior_server',
         'bt_navigator',
     ]
+    if use_map_server:
+        lifecycle_nodes.insert(0, 'map_server')
 
     nav2_params = [configured_params_file, {'use_sim_time': use_sim_time}]
 
-    return [
+    actions = [
         Node(
             package='nav2_map_server',
             executable='map_server',
@@ -85,6 +87,9 @@ def launch_setup(context, *args, **kwargs):
                 {'use_sim_time': use_sim_time, 'yaml_filename': map_file},
             ],
         ),
+    ] if use_map_server else []
+
+    actions.extend([
         Node(
             package='nav2_planner',
             executable='planner_server',
@@ -154,7 +159,8 @@ def launch_setup(context, *args, **kwargs):
                 'delay_sec': 8.0,
             }],
         ),
-    ]
+    ])
+    return actions
 
 
 def generate_launch_description():
@@ -170,6 +176,7 @@ def generate_launch_description():
             'params_file',
             default_value=os.path.join(navigation_dir, 'config', 'nav2_params.yaml'),
         ),
+        DeclareLaunchArgument('use_map_server', default_value='true'),
         DeclareLaunchArgument('use_rviz', default_value='true'),
         DeclareLaunchArgument('auto_goal', default_value='false'),
         DeclareLaunchArgument('goal_x', default_value='2.2'),

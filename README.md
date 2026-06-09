@@ -79,6 +79,23 @@ sudo apt install \
   ros-humble-gazebo-ros-pkgs
 ```
 
+如果需要使用 PointLIO bag 测试，还需要安装：
+
+```bash
+sudo apt install \
+  ros-humble-pcl-ros \
+  ros-humble-pcl-conversions \
+  ros-humble-sensor-msgs-py \
+  ros-humble-visualization-msgs
+```
+
+并确保工作区中存在：
+
+```text
+src/pointlio
+src/livox_ros_driver2
+```
+
 ## 编译
 
 在项目根目录执行：
@@ -192,6 +209,61 @@ linear.x
 linear.y
 angular.z
 ```
+
+## 启动 PointLIO Bag 建图与 Nav2 规划
+
+该入口用于测试 3D 激光 SLAM 和 2D grid 接入。默认测试 bag：
+
+```text
+/home/dtc/point_lio_ws/test_bag
+```
+
+启动：
+
+```bash
+cd /home/dtc/robo_sys
+./start_pointlio_nav_bag.sh --build
+```
+
+不启动 RViz2：
+
+```bash
+./start_pointlio_nav_bag.sh --no-rviz
+```
+
+启动后自动发送目标点：
+
+```bash
+./start_pointlio_nav_bag.sh --goal 2.0 0.0 0.0
+```
+
+指定其他 bag：
+
+```bash
+./start_pointlio_nav_bag.sh --bag /path/to/bag
+```
+
+PointLIO 接入链路：
+
+```text
+ros2 bag play ~/point_lio_ws/test_bag --clock
+        ↓
+/livox/mid360/lidar + /livox/mid360/imu
+        ↓
+point_lio / pointlio_mapping
+        ↓
+/Laser_map + /odom + map -> base_footprint
+        ↓
+pointcloud_to_occupancy_grid.py
+        ↓
+/map nav_msgs/OccupancyGrid
+        ↓
+Nav2 planner_server
+        ↓
+/plan
+```
+
+这个入口会使用 PointLIO 和点云投影节点发布动态 `/map`，因此 Nav2 不会启动自己的 `map_server`。
 
 ## 在 RViz2 中使用
 
