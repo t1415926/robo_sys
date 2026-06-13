@@ -37,6 +37,15 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /plan
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: Camera Projection
+      Marker Topic:
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /camera_projection_marker
     - Class: rviz_default_plugins/Map
       Enabled: false
       Name: Global Costmap

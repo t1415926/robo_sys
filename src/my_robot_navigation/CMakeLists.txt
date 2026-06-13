@@ -11,6 +11,7 @@ install(
 install(
   PROGRAMS
     scripts/diff_drive_interface_bridge.py
+    scripts/image_to_plane_marker.py
     scripts/pointcloud_to_occupancy_grid.py
     scripts/semantic_mask_editor.py
     scripts/send_goal_node.py

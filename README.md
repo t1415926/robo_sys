@@ -272,6 +272,32 @@ Nav2 planner_server
 
 这个入口会使用 PointLIO 和点云投影节点发布动态 `/map`，因此 Nav2 不会启动自己的 `map_server`。
 
+## 相机图像投影到 RViz 平面
+
+初版相机投影节点会把 2D 图像作为纹理贴到 RViz 中的一个平面 Marker 上，不会修改原始点云，也不会发布彩色点云。
+
+```bash
+cd /home/dtc/robo_sys
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch my_robot_navigation image_projection.launch.py \
+  image_topic:=/camera/image_raw \
+  plane_frame:=map \
+  plane_width:=4.0 \
+  plane_height:=3.0 \
+  position_x:=0.0 \
+  position_y:=0.0 \
+  position_z:=0.02
+```
+
+RViz 中显示项为 `Camera Projection`，话题是：
+
+```text
+/camera_projection_marker
+```
+
+当前版本先使用矩形平面投影。后续完成相机外参和地面/墙面平面标定后，可以把 `plane_frame`、`position_*`、`roll/pitch/yaw`、`plane_width/height` 固化到对应 launch 或参数文件中。
+
 ## 在 RViz2 中使用
 
 RViz2 的 Fixed Frame 已设置为 `map`。

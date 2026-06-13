@@ -481,3 +481,54 @@ launch/real_lidar_nav.launch.py           # 静态修整地图 + 定位 + Nav2
 ```
 
 第一阶段可以先不写复杂工具，使用 CloudCompare 和 GIMP 手动修整；等地图流程稳定后，再把重复操作脚本化。
+
+## 相机图像投影到空间平面
+
+项目中已有初版 RViz 可视化节点：
+
+```text
+src/my_robot_navigation/scripts/image_to_plane_marker.py
+src/my_robot_navigation/launch/image_projection.launch.py
+```
+
+它订阅普通相机图像，把图像作为纹理贴到 RViz 中的一个平面 Marker 上：
+
+```text
+/camera/image_raw
+        ↓
+image_to_plane_marker.py
+        ↓
+/camera_projection_marker visualization_msgs/Marker
+        ↓
+RViz Marker 显示
+```
+
+启动示例：
+
+```bash
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch my_robot_navigation image_projection.launch.py \
+  image_topic:=/camera/image_raw \
+  plane_frame:=map \
+  plane_width:=4.0 \
+  plane_height:=3.0 \
+  position_x:=0.0 \
+  position_y:=0.0 \
+  position_z:=0.02 \
+  yaw:=0.0
+```
+
+关键参数：
+
+| 参数 | 含义 |
+|---|---|
+| `image_topic` | 输入图像话题 |
+| `marker_topic` | 输出 RViz Marker 话题，默认 `/camera_projection_marker` |
+| `plane_frame` | 投影平面所在坐标系，常用 `map` |
+| `plane_width` / `plane_height` | 平面实际尺寸，单位 m |
+| `position_x/y/z` | 平面中心在 `plane_frame` 下的位置 |
+| `roll/pitch/yaw` | 平面姿态，单位 rad |
+| `alpha` | 图像平面透明度 |
+
+当前版本做的是“图像到矩形平面”的初步投影，不依赖点云，也不把点云改成彩色点云。后续标定相机外参后，可以把相机到车体、车体到地图、平面位置和尺度串起来，替换现在的手工平面参数。
