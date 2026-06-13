@@ -38,6 +38,12 @@ docs/git_workflow.md
 docs/nav2_replacement_roadmap.md
 ```
 
+真实雷达接入、建图和地图修整流程见：
+
+```text
+docs/real_lidar_mapping_workflow.md
+```
+
 初版公共接口：
 
 | 话题 / TF | 说明 |
