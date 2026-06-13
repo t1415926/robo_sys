@@ -12,6 +12,7 @@ install(
   PROGRAMS
     scripts/diff_drive_interface_bridge.py
     scripts/pointcloud_to_occupancy_grid.py
+    scripts/semantic_mask_editor.py
     scripts/send_goal_node.py
     scripts/simple_omni_base_node.py
     scripts/sim_localization_node.py

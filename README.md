@@ -92,7 +92,8 @@ sudo apt install \
   ros-humble-pcl-ros \
   ros-humble-pcl-conversions \
   ros-humble-sensor-msgs-py \
-  ros-humble-visualization-msgs
+  ros-humble-visualization-msgs \
+  python3-opencv
 ```
 
 并确保工作区中存在：

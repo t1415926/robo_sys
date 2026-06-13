@@ -273,6 +273,106 @@ src/my_robot_navigation/maps/real_site_map.pgm
 | Open3D Python | 自动化点云裁剪、滤波、投影 | 3D 到 2D 处理 |
 | GIMP / Krita | 直接编辑 `.pgm` 栅格图 | 2D 地图修整 |
 | ImageMagick | 批量二值化、膨胀、腐蚀 | 2D 地图批处理 |
+| `semantic_mask_editor.py` | 在真实 2D 投影图上绘制红/绿语义 mask | 禁行区、通行区标注 |
+
+### 语义 mask 标注工具
+
+项目中提供了一个初版可视化标注工具：
+
+```text
+src/my_robot_navigation/scripts/semantic_mask_editor.py
+```
+
+用途：
+
+```text
+真实 2D 投影图
+        ↓
+红色半透明 mask: 禁止通过区域
+绿色半透明 mask: 可以通行区域
+        ↓
+导出 overlay、语义 mask、Nav2 风格 PGM/YAML
+```
+
+安装依赖：
+
+```bash
+sudo apt install python3-opencv python3-yaml
+```
+
+直接运行：
+
+```bash
+cd /home/dtc/robo_sys
+python3 src/my_robot_navigation/scripts/semantic_mask_editor.py \
+  --image /path/to/real_projection.png \
+  --output-prefix /home/dtc/robo_sys/maps/site_mask \
+  --resolution 0.05 \
+  --origin -10.0,-10.0,0.0
+```
+
+如果已有 Nav2 地图 YAML，可以复用地图元数据，保证输出的栅格分布一致：
+
+```bash
+python3 src/my_robot_navigation/scripts/semantic_mask_editor.py \
+  --image /path/to/real_projection.png \
+  --map-yaml /home/dtc/robo_sys/src/my_robot_navigation/maps/real_site_map.yaml \
+  --output-prefix /home/dtc/robo_sys/src/my_robot_navigation/maps/real_site_semantic
+```
+
+编译安装后也可以这样运行：
+
+```bash
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 run my_robot_navigation semantic_mask_editor.py \
+  --image /path/to/real_projection.png \
+  --map-yaml src/my_robot_navigation/maps/real_site_map.yaml
+```
+
+交互方式：
+
+```text
+左键拖动: 使用当前模式绘制
+右键拖动: 擦除
+鼠标滚轮: 调整笔刷大小
+r / 1: 红色禁行区
+g / 2: 绿色通行区
+e / 0: 擦除模式
+[ / ]: 缩小 / 放大笔刷
+- / =: 降低 / 提高透明度
+u: 撤销
+c: 清空 mask
+s: 保存导出
+h: 显示帮助
+q / Esc: 退出
+```
+
+导出文件：
+
+```text
+*_overlay.png       # 底图 + 半透明红绿 mask，便于人工检查
+*_mask_color.png    # 红绿彩色 mask
+*_mask_index.png    # 机器可读 mask，0=未标注，1=禁行，2=通行
+*_nav2.pgm          # Nav2 风格栅格，红=障碍，绿=可通行，未标注=未知
+*_nav2.yaml         # 与 *_nav2.pgm 配套的地图元数据
+```
+
+默认导出中，未标注区域是未知灰色。如果希望未标注区域作为可通行区域：
+
+```bash
+python3 src/my_robot_navigation/scripts/semantic_mask_editor.py \
+  --image /path/to/real_projection.png \
+  --unlabeled-as-free
+```
+
+如果希望未标注区域全部作为禁止区域：
+
+```bash
+python3 src/my_robot_navigation/scripts/semantic_mask_editor.py \
+  --image /path/to/real_projection.png \
+  --unlabeled-as-occupied
+```
 
 ### 3D 点云修整建议
 
