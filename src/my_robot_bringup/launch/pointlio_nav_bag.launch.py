@@ -35,6 +35,8 @@ def generate_launch_description():
         output='screen',
         parameters=pointlio_params,
         remappings=[
+            ('/livox/lidar', '/livox/mid360/lidar'),
+            ('/livox/imu', '/livox/mid360/imu'),
             ('/aft_mapped_to_init', '/odom'),
         ],
     )

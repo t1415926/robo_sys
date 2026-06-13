@@ -1,0 +1,65 @@
+/**:
+  ros__parameters:
+    # ============== 通用参数 ==============
+    common:
+      lid_topic: "/livox/lidar"
+      imu_topic: "/livox/imu"
+      time_lag_imu_to_lidar: 0.0
+    
+    # ============== 预处理参数 ==============
+    preprocess:
+      lidar_type: 1               # 1-Livox, 2-Velodyne, 3-Ouster
+      scan_line: 4                # 扫描线数
+      blind: 0.5                  # 盲区距离
+      timestamp_unit: 3            # 0秒,1毫秒,2微秒,3纳秒
+    
+    # ============== SLAM建图参数 ==============
+    mapping:
+      imu_en: true
+      extrinsic_est_en: false      # 是否估计LiDAR-IMU外参
+      imu_time_inte: 0.005        # IMU时间间隔
+      plane_thr: 0.1              # 平面检测阈值
+      det_range: 100.0            # 有效检测范围
+      gravity: [0.0, 0.0, -9.810] # 重力矢量
+      gravity_init: [0.0, 0.0, -9.810]
+      extrinsic_T: [ -0.011, -0.02329, 0.04412 ]
+      extrinsic_R: [ 
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0 
+      ]
+    
+    # ============== 先验地图参数 ==============
+    prior_localization:
+      filter_size_map: 0.5         # 地图点云下采样尺寸
+      dynamic_filter_size: 0.3      # 动态点云下采样尺寸
+      mapping_en: false             # 启用建图模式 (true)或定位模式 (false)
+      map_path: ""                  # 先验地图路径 (留空使用默认)
+      extrinsic_T_prior: [-0.011, -0.02329, 0.04412] # LiDAR到IMU的平移
+      extrinsic_R_prior: [ 
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0 
+      ]  # LiDAR到IMU的旋转
+      max_iterations: 10            # 配准最大迭代次数
+      point_filter_num: 1           # 点云滤波因子
+      publish_tf: true              # 是否发布TF变换
+      base_frame: "livox_frame"     # 基础坐标系
+      map_frame: "map"               # 地图坐标系
+    
+    # ============== EKF参数 ==============
+    ekf:
+      gyr_cov: 0.1                  # 陀螺仪噪声
+      acc_cov: 0.1                  # 加速度计噪声
+      b_gyr_cov: 0.0001             # 陀螺仪偏置噪声
+      b_acc_cov: 0.0001             # 加速度计偏置噪声
+      laser_point_cov: 0.001        # 激光点云噪声
+    
+    # ============== 发布参数 ==============
+    publish:
+      path_en: true                 # 发布路径
+      scan_bodyframe_pub_en: false  # 发布body系点云
+    
+    # ============== 点云保存参数 ==============
+    pcd_save:
+      pcd_save_en: false            # 保存点云地图

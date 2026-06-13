@@ -18,4 +18,6 @@ __pycache__/
 *.bag
 *.db3
 *.mcap
+*.zip
 frames.pdf
+src/pointlio/Log/*.txt

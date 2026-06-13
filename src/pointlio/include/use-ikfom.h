@@ -1,0 +1,150 @@
+#ifndef USE_IKFOM_H
+#define USE_IKFOM_H
+
+#include "common_lib.h"
+#include <IKFoM/IKFoM_toolkit/esekfom/esekfom.hpp>
+
+typedef MTK::vect<3, double> vect3;
+typedef MTK::SO3<double> SO3;
+typedef MTK::S2<double, 98090, 10000, 1> S2;
+typedef MTK::vect<1, double> vect1;
+typedef MTK::vect<2, double> vect2;
+typedef MTK::vect<5, double> vect5;
+
+// clang-format off
+MTK_BUILD_MANIFOLD(state_ikfom, 
+((vect3, pos))
+((SO3, rot))
+((SO3, offset_R_L_I))
+((vect3, offset_T_L_I))
+((vect3, vel))
+((vect3, bg))
+((vect3, ba))
+((S2, grav))
+((vect3, offset_T_I_U)) // IMU^p_UWB
+((vect5, anchor1))      // anchor变量(x, y, z, scale, bias)
+((vect5, anchor2))
+((vect5, anchor3))
+((vect5, anchor4))
+((vect1, td))
+);
+// clang-format on
+
+//MTK_BUILD_MANIFOLD(input_ikfom, ((vect3, acc))((vect3, gyro)));
+
+MTK_BUILD_MANIFOLD(process_noise_ikfom, ((vect3, ng))((vect3, na))((vect3, nbg))((vect3, nba)));
+
+MTK::get_cov<process_noise_ikfom>::type process_noise_cov()
+{
+    MTK::get_cov<process_noise_ikfom>::type cov = MTK::get_cov<process_noise_ikfom>::type::Zero();
+    MTK::setDiagonal<process_noise_ikfom, vect3, 0>(cov, &process_noise_ikfom::ng,
+                                                    0.0001); // 0.03
+    MTK::setDiagonal<process_noise_ikfom, vect3, 3>(cov, &process_noise_ikfom::na,
+                                                    0.0001); // *dt 0.01 0.01 * dt * dt 0.05
+    MTK::setDiagonal<process_noise_ikfom, vect3, 6>(cov, &process_noise_ikfom::nbg,
+                                                    0.00001); // *dt 0.00001 0.00001 * dt *dt 0.3 //0.001 0.0001 0.01
+    MTK::setDiagonal<process_noise_ikfom, vect3, 9>(cov, &process_noise_ikfom::nba,
+                                                    0.00001); // 0.001 0.05 0.0001/out 0.01
+    return cov;
+}
+
+// double L_offset_to_I[3] = {0.04165, 0.02326, -0.0284}; // Avia
+// vect3 Lidar_offset_to_IMU(L_offset_to_I, 3);
+// fast_lio2论文公式(2), 起始这里的f就是将imu的积分方程组成矩阵形式然后再去计算，认为噪声w=0，名义状态变量
+Eigen::Matrix<double, 48, 1> get_f(state_ikfom &s, const input_ikfom &in)
+{
+    // 24对应速度(3)，角速度(3),外参偏置T(3),外参偏置R(3)，加速度(3),角速度偏置(3),
+    // 加速度偏置(3),位置(3)，与论文公式不一致
+    // uwb到imu的外参T(3), uwb的锚点位置+测距尺度+测距偏置(5*4), uwb与imu之间的时标偏差(1)
+    Eigen::Matrix<double, 48, 1> res = Eigen::Matrix<double, 48, 1>::Zero();
+    vect3 omega;
+    in.gyro.boxminus(omega, s.bg);              // 得到imu的角速度
+    vect3 a_inertial = s.rot * (in.acc - s.ba); // 加速度转到世界坐标系
+    for (int i = 0; i < 3; i++)
+    {
+        res(i) = s.vel[i];                       //更新的速度
+        res(i + 3) = omega[i];                   //更新的角速度
+        res(i + 12) = a_inertial[i] + s.grav[i]; //更新的加速度
+    }
+    return res;
+}
+
+// 对应fast_lio2论文公式(7)
+Eigen::Matrix<double, 48, 47> df_dx(state_ikfom &s, const input_ikfom &in)
+{
+    // 23对应pos(3), rot(3),offset_R_L_I(3),offset_T_L_I(3), vel(3), bg(3), ba(3),
+    // grav(2)，与论文公式不一致
+    // uwb到imu的外参T(3), uwb的锚点位置+测距尺度+测距偏置(5*4), uwb与imu之间的时标偏差(1)
+    Eigen::Matrix<double, 48, 47> cov = Eigen::Matrix<double, 48, 47>::Zero();
+
+    cov.template block<3, 3>(0, 12) = Eigen::Matrix3d::Identity(); //速度转移
+
+    vect3 acc_;
+    in.acc.boxminus(acc_, s.ba); // 加速度a_m - bias
+    vect3 omega;
+    in.gyro.boxminus(omega, s.bg); // 角速度w_m - bias
+    cov.template block<3, 3>(12, 3) = -s.rot.toRotationMatrix() * MTK::hat(acc_);
+    // 这里的-s.rot.toRotationMatrix()是因为论文中的矩阵是逆时针旋转的
+
+    cov.template block<3, 3>(12, 18) = -s.rot.toRotationMatrix();
+
+    Eigen::Matrix<state_ikfom::scalar, 2, 1> vec = Eigen::Matrix<state_ikfom::scalar, 2, 1>::Zero();
+    Eigen::Matrix<state_ikfom::scalar, 3, 2> grav_matrix;
+    s.S2_Mx(grav_matrix, vec, 21); // 将vec的2*1矩阵转为grav_matrix的3*2矩阵
+    cov.template block<3, 2>(12, 21) = grav_matrix;
+    // std::cout << "grav_mat: " << grav_matrix << std::endl << std::endl;
+
+    cov.template block<3, 3>(3, 15) = -Eigen::Matrix3d::Identity(); //角速度存入
+    return cov;
+}
+
+// 对应fast_lio2论文公式(7)
+Eigen::Matrix<double, 48, 12> df_dw(state_ikfom &s, const input_ikfom &in)
+{
+    Eigen::Matrix<double, 48, 12> cov = Eigen::Matrix<double, 48, 12>::Zero();
+    cov.template block<3, 3>(12, 3) = -s.rot.toRotationMatrix();   //加速度
+    cov.template block<3, 3>(3, 0) = -Eigen::Matrix3d::Identity(); //角速度
+    cov.template block<3, 3>(15, 6) = Eigen::Matrix3d::Identity(); //角速度偏置
+    cov.template block<3, 3>(18, 9) = Eigen::Matrix3d::Identity(); //加速度偏置
+    return cov;
+}
+
+vect3 SO3ToEuler(const SO3 &orient)
+{
+    Eigen::Matrix<double, 3, 1> _ang;
+    Eigen::Vector4d q_data = orient.coeffs().transpose();
+    // scalar w=orient.coeffs[3], x=orient.coeffs[0], y=orient.coeffs[1],
+    // z=orient.coeffs[2];
+    double sqw = q_data[3] * q_data[3];
+    double sqx = q_data[0] * q_data[0];
+    double sqy = q_data[1] * q_data[1];
+    double sqz = q_data[2] * q_data[2];
+    double unit = sqx + sqy + sqz + sqw; // if normalized is one, otherwise is correction factor
+    double test = q_data[3] * q_data[1] - q_data[2] * q_data[0];
+
+    if (test > 0.49999 * unit)
+    { // singularity at north pole
+
+        _ang << 2 * std::atan2(q_data[0], q_data[3]), M_PI / 2, 0;
+        double temp[3] = {_ang[0] * 57.3, _ang[1] * 57.3, _ang[2] * 57.3};
+        vect3 euler_ang(temp, 3);
+        return euler_ang;
+    }
+    if (test < -0.49999 * unit)
+    { // singularity at south pole
+        _ang << -2 * std::atan2(q_data[0], q_data[3]), -M_PI / 2, 0;
+        double temp[3] = {_ang[0] * 57.3, _ang[1] * 57.3, _ang[2] * 57.3};
+        vect3 euler_ang(temp, 3);
+        return euler_ang;
+    }
+
+    _ang << std::atan2(2 * q_data[0] * q_data[3] + 2 * q_data[1] * q_data[2], -sqx - sqy + sqz + sqw),
+        std::asin(2 * test / unit),
+        std::atan2(2 * q_data[2] * q_data[3] + 2 * q_data[1] * q_data[0], sqx - sqy - sqz + sqw);
+    double temp[3] = {_ang[0] * 57.3, _ang[1] * 57.3, _ang[2] * 57.3};
+    vect3 euler_ang(temp, 3);
+    // euler_ang[0] = roll, euler_ang[1] = pitch, euler_ang[2] = yaw
+    return euler_ang;
+}
+
+#endif
