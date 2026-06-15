@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Standalone A* global planner used by the A* demo launch.
+"""A* 示例使用的独立全局规划节点。
 
-This node deliberately does not call Nav2's planner_server. It reads an
-OccupancyGrid, accepts RViz /goal_pose goals, runs grid-based A*, and publishes
-nav_msgs/Path on /plan. A separate bridge node may then hand that /plan to Nav2
-controller_server for FollowPath tracking.
+这个节点刻意不调用 Nav2 的 planner_server。它读取 OccupancyGrid，接收
+RViz 发布的 /goal_pose，在栅格地图上运行 A*，并把 nav_msgs/Path 发布
+到 /plan。后续可以由桥接节点把 /plan 交给 Nav2 controller_server 的
+FollowPath action 做轨迹跟踪。
 """
 
 import heapq
@@ -38,32 +38,30 @@ def normalize_angle(angle):
 class AStarPlannerNode(Node):
     def __init__(self):
         super().__init__('astar_planner_node')
-        # Topic and frame parameters keep the node reusable for both simulation
-        # maps and future SLAM-generated maps.
+        # 话题和坐标系参数保持可配置，方便同时用于仿真地图和后续 SLAM 生成地图。
         self.declare_parameter('map_topic', '/map')
         self.declare_parameter('goal_topic', '/goal_pose')
         self.declare_parameter('plan_topic', '/plan')
         self.declare_parameter('map_frame', 'map')
         self.declare_parameter('base_frame', 'base_footprint')
 
-        # OccupancyGrid values are interpreted as:
-        #   -1: unknown
-        #    0: free
-        #  100: occupied
-        # Values >= occupied_threshold are treated as obstacles.
+        # OccupancyGrid 数值约定：
+        #   -1: 未知
+        #    0: 空闲
+        #  100: 占据
+        # 大于等于 occupied_threshold 的格子会被当作障碍。
         self.declare_parameter('occupied_threshold', 65)
         self.declare_parameter('unknown_is_obstacle', True)
         self.declare_parameter('allow_diagonal', True)
 
-        # We inflate obstacles in the A* grid itself so the global path keeps a
-        # basic clearance from walls even before Nav2's local costmap sees it.
+        # 在 A* 栅格内部提前膨胀障碍物，使全局路径在进入 Nav2 局部控制前
+        # 就和墙体、障碍保持基本安全距离。
         self.declare_parameter('robot_radius', 0.22)
         self.declare_parameter('extra_inflation_radius', 0.05)
         self.declare_parameter('simplify_path', True)
 
-        # Initial implementation of "rotation is only allowed in specific
-        # areas": the first valid robot pose becomes the only rotation zone.
-        # Later this can be replaced with a semantic mask or polygon list.
+        # “只能在特定区域旋转”的初版实现：第一次有效机器人位姿会成为唯一
+        # 可旋转区域。后续可以替换为语义 mask 或多边形区域列表。
         self.declare_parameter('rotation_constraint_enabled', True)
         self.declare_parameter('rotation_yaw_threshold', 0.35)
         self.declare_parameter('rotation_zone_tolerance', 0.20)
@@ -74,9 +72,9 @@ class AStarPlannerNode(Node):
         self.last_initial_pose = None
         self.rotation_zone_pose = None
 
-        # When a goal requires rotation while the robot is outside the rotation
-        # zone, we first publish a path back to the zone and store the real goal
-        # here. check_pending_goal() publishes the final path after arrival.
+        # 当目标需要改变朝向且机器人不在可旋转区域内时，先发布一段回到旋转区
+        # 的路径，并把真实目标暂存在这里。check_pending_goal() 会在到达旋转区
+        # 后发布最终目标路径。
         self.pending_goal = None
 
         self.map_frame = self.get_parameter('map_frame').value
@@ -131,9 +129,8 @@ class AStarPlannerNode(Node):
         )
 
     def map_callback(self, msg):
-        # Rebuild the inflated occupancy grid whenever /map changes. This keeps
-        # the A* planner compatible with both static and dynamically projected
-        # maps.
+        # 每次 /map 更新都重建膨胀后的障碍栅格。这样既支持静态地图，也支持
+        # 点云实时投影生成的动态地图。
         self.map_msg = msg
         self.blocked = self.build_blocked_grid(msg)
         self.get_logger().info(
@@ -142,8 +139,8 @@ class AStarPlannerNode(Node):
         )
 
     def initial_pose_callback(self, msg):
-        # Fallback start pose for cases where TF is not available yet. In the
-        # normal sim path, map->odom and odom->base_footprint provide TF.
+        # TF 暂时不可用时的备用起点。在正常仿真链路中，起点来自
+        # map->odom 和 odom->base_footprint 组成的 TF。
         self.last_initial_pose = msg.pose.pose
 
     def goal_callback(self, msg):
@@ -160,9 +157,8 @@ class AStarPlannerNode(Node):
             return
 
         if self.rotation_zone_pose is None:
-            # The user asked to use the initial point as a rotation-capable
-            # area. We define that lazily on the first valid planning request so
-            # the pose comes from the same source A* will use for planning.
+            # 根据需求：初始点就是可旋转区域。这里在第一次有效规划请求时再
+            # 记录它，保证这个位姿和 A* 后续使用的起点来源一致。
             self.rotation_zone_pose = start_pose
             self.publish_rotation_zone_marker()
             self.get_logger().info(
@@ -173,8 +169,8 @@ class AStarPlannerNode(Node):
         self.plan_to_goal(start_pose, msg)
 
     def plan_to_goal(self, start_pose, goal_msg, ignore_rotation_constraint=False):
-        # A* operates on integer grid cells. Convert both start and goal from
-        # map-frame meters into OccupancyGrid indices before searching.
+        # A* 在整数栅格坐标上搜索。开始搜索前，先把 map 坐标系下的米制坐标
+        # 转成 OccupancyGrid 的栅格索引。
         start = self.world_to_cell(start_pose.position.x, start_pose.position.y)
         goal = self.world_to_cell(goal_msg.pose.position.x, goal_msg.pose.position.y)
 
@@ -194,10 +190,9 @@ class AStarPlannerNode(Node):
         goal_yaw = yaw_from_quaternion(goal_msg.pose.orientation)
         start_yaw = yaw_from_quaternion(start_pose.orientation)
 
-        # Rotation-area rule:
-        # If the target requires a meaningful yaw change and the robot is not
-        # already in a rotation zone, first route to the initial rotation zone.
-        # Once the robot arrives there, check_pending_goal() sends the real goal.
+        # 可旋转区域规则：
+        # 如果目标需要明显改变 yaw，且机器人当前不在可旋转区域内，就先规划
+        # 回初始旋转区。机器人到达后，check_pending_goal() 再发布真实目标。
         if (
             self.rotation_constraint_enabled
             and not ignore_rotation_constraint
@@ -216,9 +211,8 @@ class AStarPlannerNode(Node):
         if bool(self.get_parameter('simplify_path').value):
             cells = self.simplify_cells(cells)
 
-        # Outside rotation zones, do not ask the controller to achieve the final
-        # target yaw. The last pose will inherit the path heading instead. This
-        # keeps rotate-to-goal behavior out of restricted areas.
+        # 如果最终目标不在可旋转区域内，就不要要求控制器在终点完成目标朝向。
+        # 此时最后一个路径点继承路径方向，避免在受限区域触发原地旋转。
         final_yaw = goal_yaw
         if self.rotation_constraint_enabled and not self.is_near_rotation_zone(goal_msg.pose):
             final_yaw = None
@@ -230,9 +224,9 @@ class AStarPlannerNode(Node):
         )
 
     def plan_to_rotation_zone_then_wait(self, start_pose, goal_msg):
-        # Publish only the first leg: current pose -> rotation zone. The final
-        # goal is intentionally delayed so Nav2 controller finishes this leg
-        # before receiving the next FollowPath request.
+        # 这里只发布第一段路径：当前位置 -> 可旋转区域。最终目标会被延后，
+        # 等 Nav2 controller 完成第一段 FollowPath 后再发布，避免一次性把整条
+        # 路径交给控制器导致中途旋转约束失效。
         rotation_cell = self.world_to_cell(
             self.rotation_zone_pose.position.x,
             self.rotation_zone_pose.position.y,
@@ -262,9 +256,8 @@ class AStarPlannerNode(Node):
         return True
 
     def check_pending_goal(self):
-        # Poll robot pose while a delayed goal exists. When the robot reaches the
-        # rotation zone, publish the second leg and ignore the rotation check to
-        # avoid looping back into the same staging behavior.
+        # 存在延后目标时，周期性检查机器人是否已经到达旋转区。到达后发布第二段
+        # 路径，并忽略旋转约束检查，避免再次进入“先回旋转区”的流程。
         if self.pending_goal is None:
             return
         start_pose = self.get_start_pose()
@@ -279,8 +272,8 @@ class AStarPlannerNode(Node):
         self.plan_to_goal(start_pose, goal, ignore_rotation_constraint=True)
 
     def is_near_rotation_zone(self, pose):
-        # The current demo has one circular rotation zone. A future mask-based
-        # implementation can replace this method without touching A* itself.
+        # 当前示例只有一个圆形可旋转区。后续接入 mask 或多边形区域时，
+        # 可以优先替换这个函数，而不用改 A* 搜索主体。
         if self.rotation_zone_pose is None:
             return False
         dx = pose.position.x - self.rotation_zone_pose.position.x
@@ -288,9 +281,8 @@ class AStarPlannerNode(Node):
         return math.hypot(dx, dy) <= self.rotation_zone_tolerance
 
     def heading_from_rotation_zone_to_goal(self, goal_msg):
-        # When driving back to the rotation zone, face roughly toward the final
-        # goal. This lets the controller rotate in the allowed area before the
-        # second path segment is sent.
+        # 回到旋转区时，让车体大致朝向最终目标。这样控制器会在允许旋转的区域
+        # 内完成朝向调整，然后再接收第二段路径。
         dx = goal_msg.pose.position.x - self.rotation_zone_pose.position.x
         dy = goal_msg.pose.position.y - self.rotation_zone_pose.position.y
         if math.hypot(dx, dy) < 1e-6:
@@ -298,9 +290,8 @@ class AStarPlannerNode(Node):
         return math.atan2(dy, dx)
 
     def get_start_pose(self):
-        # Prefer TF because it reflects the live robot pose. Fall back to the
-        # last RViz initial pose so planning can still be tested in partial
-        # bringups.
+        # 优先使用 TF，因为它反映当前真实/仿真的机器人位姿。如果 TF 不可用，
+        # 则退回到 RViz 2D Pose Estimate 最近发布的初始位姿，方便局部 bringup 测试。
         try:
             transform = self.tf_buffer.lookup_transform(
                 self.map_frame,
@@ -317,9 +308,8 @@ class AStarPlannerNode(Node):
             return self.last_initial_pose
 
     def build_blocked_grid(self, msg):
-        # Convert the OccupancyGrid's flat row-major data into a 2D boolean map
-        # and inflate occupied cells by robot radius. True means "A* may not use
-        # this cell".
+        # 把 OccupancyGrid 的一维行优先数据转成二维布尔栅格，并按机器人半径
+        # 膨胀障碍物。True 表示 A* 不能使用该格子。
         width = msg.info.width
         height = msg.info.height
         raw = list(msg.data)
@@ -341,8 +331,8 @@ class AStarPlannerNode(Node):
 
         inflated = [row[:] for row in occupied]
 
-        # Precompute circular inflation offsets in cells. This is simple and
-        # explicit; for larger maps we can optimize with distance transforms.
+        # 预先计算圆形膨胀范围内的栅格偏移。当前写法直观清楚；如果地图变大，
+        # 后续可以用距离变换等方法优化。
         offsets = []
         for dy in range(-inflate_cells, inflate_cells + 1):
             for dx in range(-inflate_cells, inflate_cells + 1):
@@ -361,8 +351,8 @@ class AStarPlannerNode(Node):
         return inflated
 
     def world_to_cell(self, wx, wy):
-        # OccupancyGrid origin is the lower-left map pose. We plan in cell
-        # centers but use floor() here to find the containing cell.
+        # OccupancyGrid 的 origin 是地图左下角位姿。这里用 floor() 找到世界坐标
+        # 所在的格子，后续发布路径时再使用格子中心点。
         info = self.map_msg.info
         mx = int(math.floor((wx - info.origin.position.x) / info.resolution))
         my = int(math.floor((wy - info.origin.position.y) / info.resolution))
@@ -371,7 +361,7 @@ class AStarPlannerNode(Node):
         return None
 
     def cell_to_world(self, mx, my):
-        # Convert a grid index back to the center point of that cell in meters.
+        # 把栅格索引转回该格子中心点的世界坐标，单位是米。
         info = self.map_msg.info
         return (
             info.origin.position.x + (mx + 0.5) * info.resolution,
@@ -382,8 +372,8 @@ class AStarPlannerNode(Node):
         return self.blocked[my][mx]
 
     def astar(self, start, goal):
-        # Standard A*: open_heap stores (f_score, g_score, cell). best_cost
-        # prevents revisiting cells through more expensive routes.
+        # 标准 A*：open_heap 中保存 (f_score, g_score, cell)。best_cost 用来
+        # 避免用更差的代价重复访问同一个格子。
         open_heap = []
         heapq.heappush(open_heap, (0.0, 0.0, start))
         came_from = {}
@@ -411,8 +401,8 @@ class AStarPlannerNode(Node):
         return []
 
     def neighbors(self, cell):
-        # Generate 4- or 8-connected neighbors. Diagonal corner-cutting is
-        # blocked so the path cannot slip between two inflated obstacle cells.
+        # 生成 4 邻接或 8 邻接候选格子。对角移动时禁止“切角”，避免路径从两个
+        # 膨胀障碍格子之间挤过去。
         x, y = cell
         motions = [
             (1, 0, 1.0),
@@ -454,8 +444,8 @@ class AStarPlannerNode(Node):
 
     @staticmethod
     def simplify_cells(cells):
-        # Compress straight runs into just their turning points. This keeps RViz
-        # and FollowPath goals readable while preserving the same polyline.
+        # 把连续直线段压缩成拐点序列。这样 RViz 和 FollowPath 看到的路径更简洁，
+        # 同时保持原来的折线路径形状。
         if len(cells) <= 2:
             return cells
         simplified = [cells[0]]
@@ -475,8 +465,8 @@ class AStarPlannerNode(Node):
         return simplified
 
     def cells_to_path(self, cells, final_yaw=None):
-        # Publish a normal nav_msgs/Path so RViz can display it and the bridge
-        # can send it to Nav2 controller_server's FollowPath action.
+        # 转成标准 nav_msgs/Path。RViz 可以直接显示，桥接节点也可以把它发给
+        # Nav2 controller_server 的 FollowPath action。
         path = Path()
         path.header.stamp = self.get_clock().now().to_msg()
         path.header.frame_id = self.map_frame
@@ -506,8 +496,7 @@ class AStarPlannerNode(Node):
         return path
 
     def publish_rotation_zone_marker(self):
-        # Visual hint in RViz: a blue translucent disk marks where rotation is
-        # allowed in this first implementation.
+        # RViz 可视化提示：用一个蓝色半透明圆盘标出当前允许旋转的区域。
         marker = Marker()
         marker.header.stamp = self.get_clock().now().to_msg()
         marker.header.frame_id = self.map_frame
