@@ -134,6 +134,9 @@ def generate_launch_description():
                 'occupied_threshold': 65,
                 'unknown_is_obstacle': True,
                 'allow_diagonal': True,
+                'rotation_constraint_enabled': True,
+                'rotation_yaw_threshold': 0.35,
+                'rotation_zone_tolerance': 0.20,
             }],
         ),
         Node(

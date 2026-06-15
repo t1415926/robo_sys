@@ -214,6 +214,16 @@ astar_follow_path_bridge.py     # 自己实现，把 /plan 发送给 FollowPath 
 Nav2 controller_server          # 复用 Nav2 局部轨迹跟踪，输出 /cmd_vel
 ```
 
+旋转受限示例：
+
+```text
+首次规划时的机器人起点会被记录为可旋转区域
+如果后续目标朝向变化超过阈值，A* 会先规划回该旋转区域
+到达旋转区域后，再自动发布去最终目标的路径
+```
+
+RViz 中 `Rotation Zones` 会显示当前可旋转区域。当前只是初版约束示例，后续可以扩展为多块可旋转区域 mask。
+
 ## 启动 Gazebo 全向底盘导航
 
 Gazebo 版本使用同一套 Nav2、同一张 2D 地图和同一个 RViz 配置，但底盘由 Gazebo 中的全向模型显示和运动。

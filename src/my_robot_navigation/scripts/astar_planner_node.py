@@ -9,11 +9,22 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from tf2_ros import Buffer, TransformException, TransformListener
+from visualization_msgs.msg import Marker
 
 
 def quaternion_from_yaw(yaw):
     half = yaw * 0.5
     return math.sin(half), math.cos(half)
+
+
+def yaw_from_quaternion(q):
+    siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+    cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+
+def normalize_angle(angle):
+    return math.atan2(math.sin(angle), math.cos(angle))
 
 
 class AStarPlannerNode(Node):
@@ -30,10 +41,16 @@ class AStarPlannerNode(Node):
         self.declare_parameter('robot_radius', 0.22)
         self.declare_parameter('extra_inflation_radius', 0.05)
         self.declare_parameter('simplify_path', True)
+        self.declare_parameter('rotation_constraint_enabled', True)
+        self.declare_parameter('rotation_yaw_threshold', 0.35)
+        self.declare_parameter('rotation_zone_tolerance', 0.20)
+        self.declare_parameter('rotation_zone_marker_topic', '/rotation_zones')
 
         self.map_msg = None
         self.blocked = None
         self.last_initial_pose = None
+        self.rotation_zone_pose = None
+        self.pending_goal = None
 
         self.map_frame = self.get_parameter('map_frame').value
         self.base_frame = self.get_parameter('base_frame').value
@@ -42,6 +59,11 @@ class AStarPlannerNode(Node):
         self.allow_diagonal = bool(self.get_parameter('allow_diagonal').value)
         self.robot_radius = float(self.get_parameter('robot_radius').value)
         self.extra_inflation_radius = float(self.get_parameter('extra_inflation_radius').value)
+        self.rotation_constraint_enabled = bool(
+            self.get_parameter('rotation_constraint_enabled').value
+        )
+        self.rotation_yaw_threshold = float(self.get_parameter('rotation_yaw_threshold').value)
+        self.rotation_zone_tolerance = float(self.get_parameter('rotation_zone_tolerance').value)
 
         map_qos = QoSProfile(depth=1)
         map_qos.reliability = ReliabilityPolicy.RELIABLE
@@ -66,9 +88,15 @@ class AStarPlannerNode(Node):
             10,
         )
         self.plan_pub = self.create_publisher(Path, self.get_parameter('plan_topic').value, 10)
+        self.rotation_marker_pub = self.create_publisher(
+            Marker,
+            self.get_parameter('rotation_zone_marker_topic').value,
+            1,
+        )
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
+        self.create_timer(0.2, self.check_pending_goal)
 
         self.get_logger().info(
             f'A* planner ready: map={self.get_parameter("map_topic").value}, '
@@ -99,8 +127,19 @@ class AStarPlannerNode(Node):
             )
             return
 
+        if self.rotation_zone_pose is None:
+            self.rotation_zone_pose = start_pose
+            self.publish_rotation_zone_marker()
+            self.get_logger().info(
+                'Set initial pose as rotation zone: '
+                f'x={start_pose.position.x:.2f}, y={start_pose.position.y:.2f}'
+            )
+
+        self.plan_to_goal(start_pose, msg)
+
+    def plan_to_goal(self, start_pose, goal_msg, ignore_rotation_constraint=False):
         start = self.world_to_cell(start_pose.position.x, start_pose.position.y)
-        goal = self.world_to_cell(msg.pose.position.x, msg.pose.position.y)
+        goal = self.world_to_cell(goal_msg.pose.position.x, goal_msg.pose.position.y)
 
         if start is None:
             self.get_logger().warn('Start pose is outside the map.')
@@ -115,6 +154,18 @@ class AStarPlannerNode(Node):
             self.get_logger().warn(f'Goal cell is occupied or inflated: {goal}')
             return
 
+        goal_yaw = yaw_from_quaternion(goal_msg.pose.orientation)
+        start_yaw = yaw_from_quaternion(start_pose.orientation)
+        if (
+            self.rotation_constraint_enabled
+            and not ignore_rotation_constraint
+            and self.rotation_zone_pose is not None
+            and abs(normalize_angle(goal_yaw - start_yaw)) > self.rotation_yaw_threshold
+            and not self.is_near_rotation_zone(start_pose)
+        ):
+            if self.plan_to_rotation_zone_then_wait(start_pose, goal_msg):
+                return
+
         cells = self.astar(start, goal)
         if not cells:
             self.get_logger().warn(f'A* failed: no path from {start} to {goal}.')
@@ -123,12 +174,72 @@ class AStarPlannerNode(Node):
         if bool(self.get_parameter('simplify_path').value):
             cells = self.simplify_cells(cells)
 
-        path = self.cells_to_path(cells)
+        final_yaw = goal_yaw
+        if self.rotation_constraint_enabled and not self.is_near_rotation_zone(goal_msg.pose):
+            final_yaw = None
+        path = self.cells_to_path(cells, final_yaw=final_yaw)
         self.plan_pub.publish(path)
         self.get_logger().info(
             f'Published A* path with {len(path.poses)} poses '
             f'from ({start[0]}, {start[1]}) to ({goal[0]}, {goal[1]}).'
         )
+
+    def plan_to_rotation_zone_then_wait(self, start_pose, goal_msg):
+        rotation_cell = self.world_to_cell(
+            self.rotation_zone_pose.position.x,
+            self.rotation_zone_pose.position.y,
+        )
+        start_cell = self.world_to_cell(start_pose.position.x, start_pose.position.y)
+        if rotation_cell is None or start_cell is None:
+            self.get_logger().warn('Rotation zone or start pose is outside the map.')
+            return False
+        if self.is_blocked(*rotation_cell):
+            self.get_logger().warn('Rotation zone is occupied or inflated; falling back to direct plan.')
+            return False
+
+        cells = self.astar(start_cell, rotation_cell)
+        if not cells:
+            self.get_logger().warn('Cannot plan to rotation zone; falling back to direct plan.')
+            return False
+        if bool(self.get_parameter('simplify_path').value):
+            cells = self.simplify_cells(cells)
+
+        self.pending_goal = goal_msg
+        path = self.cells_to_path(cells, final_yaw=self.heading_from_rotation_zone_to_goal(goal_msg))
+        self.plan_pub.publish(path)
+        self.get_logger().info(
+            'Goal requires rotation. First published path to initial rotation zone; '
+            'final goal will be planned after reaching the zone.'
+        )
+        return True
+
+    def check_pending_goal(self):
+        if self.pending_goal is None:
+            return
+        start_pose = self.get_start_pose()
+        if start_pose is None:
+            return
+        if not self.is_near_rotation_zone(start_pose):
+            return
+
+        goal = self.pending_goal
+        self.pending_goal = None
+        self.get_logger().info('Reached rotation zone; publishing final path to goal.')
+        self.plan_to_goal(start_pose, goal, ignore_rotation_constraint=True)
+
+    def is_near_rotation_zone(self, pose):
+        if self.rotation_zone_pose is None:
+            return False
+        dx = pose.position.x - self.rotation_zone_pose.position.x
+        dy = pose.position.y - self.rotation_zone_pose.position.y
+        return math.hypot(dx, dy) <= self.rotation_zone_tolerance
+
+    def heading_from_rotation_zone_to_goal(self, goal_msg):
+        dx = goal_msg.pose.position.x - self.rotation_zone_pose.position.x
+        dy = goal_msg.pose.position.y - self.rotation_zone_pose.position.y
+        if math.hypot(dx, dy) < 1e-6:
+            return yaw_from_quaternion(goal_msg.pose.orientation)
+        return math.atan2(dy, dx)
 
     def get_start_pose(self):
         try:
@@ -289,7 +400,7 @@ class AStarPlannerNode(Node):
         simplified.append(cells[-1])
         return simplified
 
-    def cells_to_path(self, cells):
+    def cells_to_path(self, cells, final_yaw=None):
         path = Path()
         path.header.stamp = self.get_clock().now().to_msg()
         path.header.frame_id = self.map_frame
@@ -302,7 +413,9 @@ class AStarPlannerNode(Node):
             pose.pose.position.y = y
             pose.pose.position.z = 0.0
 
-            if index + 1 < len(cells):
+            if index == len(cells) - 1 and final_yaw is not None:
+                yaw = final_yaw
+            elif index + 1 < len(cells):
                 nx, ny = self.cell_to_world(*cells[index + 1])
                 yaw = math.atan2(ny - y, nx - x)
             elif index > 0:
@@ -315,6 +428,27 @@ class AStarPlannerNode(Node):
             pose.pose.orientation.w = qw
             path.poses.append(pose)
         return path
+
+    def publish_rotation_zone_marker(self):
+        marker = Marker()
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.frame_id = self.map_frame
+        marker.ns = 'rotation_zone'
+        marker.id = 0
+        marker.type = Marker.CYLINDER
+        marker.action = Marker.ADD
+        marker.pose.position.x = self.rotation_zone_pose.position.x
+        marker.pose.position.y = self.rotation_zone_pose.position.y
+        marker.pose.position.z = 0.03
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = self.rotation_zone_tolerance * 2.0
+        marker.scale.y = self.rotation_zone_tolerance * 2.0
+        marker.scale.z = 0.04
+        marker.color.r = 0.0
+        marker.color.g = 0.7
+        marker.color.b = 1.0
+        marker.color.a = 0.45
+        self.rotation_marker_pub.publish(marker)
 
 
 def main():
