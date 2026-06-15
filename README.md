@@ -176,6 +176,31 @@ ros2 launch my_robot_bringup sim_bringup.launch.py
 6. RViz2
 ```
 
+## 启动 A* 全局规划示例
+
+这个入口不启动 Nav2 的 `planner_server`、`controller_server`、`bt_navigator`，只使用 `map_server` 读取地图，然后由项目内的 A* 节点订阅 `/goal_pose` 并发布 `/plan`。
+
+```bash
+cd /home/dtc/robo_sys
+./start_astar_planning.sh --build
+```
+
+自动发布一个目标点并规划：
+
+```bash
+./start_astar_planning.sh --goal 2.2 1.8 0.0
+```
+
+RViz 中使用 `2D Goal Pose` 工具点目标，A* 路径会显示在 `AStar Path`：
+
+```text
+/map       nav_msgs/OccupancyGrid
+/goal_pose geometry_msgs/PoseStamped
+/plan      nav_msgs/Path
+```
+
+当前 A* 示例只做全局路径搜索和显示，不做轨迹跟踪，也不会输出 `/cmd_vel`。
+
 ## 启动 Gazebo 全向底盘导航
 
 Gazebo 版本使用同一套 Nav2、同一张 2D 地图和同一个 RViz 配置，但底盘由 Gazebo 中的全向模型显示和运动。
