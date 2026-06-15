@@ -31,10 +31,6 @@ def yaw_from_quaternion(q):
     return math.atan2(siny_cosp, cosy_cosp)
 
 
-def normalize_angle(angle):
-    return math.atan2(math.sin(angle), math.cos(angle))
-
-
 class AStarPlannerNode(Node):
     def __init__(self):
         super().__init__('astar_planner_node')
@@ -60,22 +56,16 @@ class AStarPlannerNode(Node):
         self.declare_parameter('extra_inflation_radius', 0.05)
         self.declare_parameter('simplify_path', True)
 
-        # “只能在特定区域旋转”的初版实现：第一次有效机器人位姿会成为唯一
-        # 可旋转区域。后续可以替换为语义 mask 或多边形区域列表。
-        self.declare_parameter('rotation_constraint_enabled', True)
-        self.declare_parameter('rotation_yaw_threshold', 0.35)
-        self.declare_parameter('rotation_zone_tolerance', 0.20)
-        self.declare_parameter('rotation_zone_marker_topic', '/rotation_zones')
+        # 掉头区简化模型：第一次有效机器人位姿会成为唯一掉头点。窄路区域
+        # 仍然可以正常行驶，但不要求机器人在终点原地调整目标朝向。
+        self.declare_parameter('turnaround_constraint_enabled', True)
+        self.declare_parameter('turnaround_zone_tolerance', 0.35)
+        self.declare_parameter('turnaround_zone_marker_topic', '/turnaround_zones')
 
         self.map_msg = None
         self.blocked = None
         self.last_initial_pose = None
-        self.rotation_zone_pose = None
-
-        # 当目标需要改变朝向且机器人不在可旋转区域内时，先发布一段回到旋转区
-        # 的路径，并把真实目标暂存在这里。check_pending_goal() 会在到达旋转区
-        # 后发布最终目标路径。
-        self.pending_goal = None
+        self.turnaround_zone_pose = None
 
         self.map_frame = self.get_parameter('map_frame').value
         self.base_frame = self.get_parameter('base_frame').value
@@ -84,11 +74,10 @@ class AStarPlannerNode(Node):
         self.allow_diagonal = bool(self.get_parameter('allow_diagonal').value)
         self.robot_radius = float(self.get_parameter('robot_radius').value)
         self.extra_inflation_radius = float(self.get_parameter('extra_inflation_radius').value)
-        self.rotation_constraint_enabled = bool(
-            self.get_parameter('rotation_constraint_enabled').value
+        self.turnaround_constraint_enabled = bool(
+            self.get_parameter('turnaround_constraint_enabled').value
         )
-        self.rotation_yaw_threshold = float(self.get_parameter('rotation_yaw_threshold').value)
-        self.rotation_zone_tolerance = float(self.get_parameter('rotation_zone_tolerance').value)
+        self.turnaround_zone_tolerance = float(self.get_parameter('turnaround_zone_tolerance').value)
 
         map_qos = QoSProfile(depth=1)
         map_qos.reliability = ReliabilityPolicy.RELIABLE
@@ -113,15 +102,14 @@ class AStarPlannerNode(Node):
             10,
         )
         self.plan_pub = self.create_publisher(Path, self.get_parameter('plan_topic').value, 10)
-        self.rotation_marker_pub = self.create_publisher(
+        self.turnaround_marker_pub = self.create_publisher(
             Marker,
-            self.get_parameter('rotation_zone_marker_topic').value,
+            self.get_parameter('turnaround_zone_marker_topic').value,
             1,
         )
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-        self.create_timer(0.2, self.check_pending_goal)
 
         self.get_logger().info(
             f'A* planner ready: map={self.get_parameter("map_topic").value}, '
@@ -156,19 +144,19 @@ class AStarPlannerNode(Node):
             )
             return
 
-        if self.rotation_zone_pose is None:
-            # 根据需求：初始点就是可旋转区域。这里在第一次有效规划请求时再
+        if self.turnaround_zone_pose is None:
+            # 根据需求：初始点就是掉头区域。这里在第一次有效规划请求时再
             # 记录它，保证这个位姿和 A* 后续使用的起点来源一致。
-            self.rotation_zone_pose = start_pose
-            self.publish_rotation_zone_marker()
+            self.turnaround_zone_pose = start_pose
+            self.publish_turnaround_zone_marker()
             self.get_logger().info(
-                'Set initial pose as rotation zone: '
+                'Set initial pose as turnaround zone: '
                 f'x={start_pose.position.x:.2f}, y={start_pose.position.y:.2f}'
             )
 
         self.plan_to_goal(start_pose, msg)
 
-    def plan_to_goal(self, start_pose, goal_msg, ignore_rotation_constraint=False):
+    def plan_to_goal(self, start_pose, goal_msg):
         # A* 在整数栅格坐标上搜索。开始搜索前，先把 map 坐标系下的米制坐标
         # 转成 OccupancyGrid 的栅格索引。
         start = self.world_to_cell(start_pose.position.x, start_pose.position.y)
@@ -188,20 +176,6 @@ class AStarPlannerNode(Node):
             return
 
         goal_yaw = yaw_from_quaternion(goal_msg.pose.orientation)
-        start_yaw = yaw_from_quaternion(start_pose.orientation)
-
-        # 可旋转区域规则：
-        # 如果目标需要明显改变 yaw，且机器人当前不在可旋转区域内，就先规划
-        # 回初始旋转区。机器人到达后，check_pending_goal() 再发布真实目标。
-        if (
-            self.rotation_constraint_enabled
-            and not ignore_rotation_constraint
-            and self.rotation_zone_pose is not None
-            and abs(normalize_angle(goal_yaw - start_yaw)) > self.rotation_yaw_threshold
-            and not self.is_near_rotation_zone(start_pose)
-        ):
-            if self.plan_to_rotation_zone_then_wait(start_pose, goal_msg):
-                return
 
         cells = self.astar(start, goal)
         if not cells:
@@ -211,10 +185,10 @@ class AStarPlannerNode(Node):
         if bool(self.get_parameter('simplify_path').value):
             cells = self.simplify_cells(cells)
 
-        # 如果最终目标不在可旋转区域内，就不要要求控制器在终点完成目标朝向。
-        # 此时最后一个路径点继承路径方向，避免在受限区域触发原地旋转。
+        # 如果最终目标不在掉头区域内，就不要要求控制器在终点完成目标朝向。
+        # 此时最后一个路径点继承道路方向，适合窄单行道路上的“只前进不掉头”。
         final_yaw = goal_yaw
-        if self.rotation_constraint_enabled and not self.is_near_rotation_zone(goal_msg.pose):
+        if self.turnaround_constraint_enabled and not self.is_near_turnaround_zone(goal_msg.pose):
             final_yaw = None
         path = self.cells_to_path(cells, final_yaw=final_yaw)
         self.plan_pub.publish(path)
@@ -223,71 +197,14 @@ class AStarPlannerNode(Node):
             f'from ({start[0]}, {start[1]}) to ({goal[0]}, {goal[1]}).'
         )
 
-    def plan_to_rotation_zone_then_wait(self, start_pose, goal_msg):
-        # 这里只发布第一段路径：当前位置 -> 可旋转区域。最终目标会被延后，
-        # 等 Nav2 controller 完成第一段 FollowPath 后再发布，避免一次性把整条
-        # 路径交给控制器导致中途旋转约束失效。
-        rotation_cell = self.world_to_cell(
-            self.rotation_zone_pose.position.x,
-            self.rotation_zone_pose.position.y,
-        )
-        start_cell = self.world_to_cell(start_pose.position.x, start_pose.position.y)
-        if rotation_cell is None or start_cell is None:
-            self.get_logger().warn('Rotation zone or start pose is outside the map.')
-            return False
-        if self.is_blocked(*rotation_cell):
-            self.get_logger().warn('Rotation zone is occupied or inflated; falling back to direct plan.')
-            return False
-
-        cells = self.astar(start_cell, rotation_cell)
-        if not cells:
-            self.get_logger().warn('Cannot plan to rotation zone; falling back to direct plan.')
-            return False
-        if bool(self.get_parameter('simplify_path').value):
-            cells = self.simplify_cells(cells)
-
-        self.pending_goal = goal_msg
-        path = self.cells_to_path(cells, final_yaw=self.heading_from_rotation_zone_to_goal(goal_msg))
-        self.plan_pub.publish(path)
-        self.get_logger().info(
-            'Goal requires rotation. First published path to initial rotation zone; '
-            'final goal will be planned after reaching the zone.'
-        )
-        return True
-
-    def check_pending_goal(self):
-        # 存在延后目标时，周期性检查机器人是否已经到达旋转区。到达后发布第二段
-        # 路径，并忽略旋转约束检查，避免再次进入“先回旋转区”的流程。
-        if self.pending_goal is None:
-            return
-        start_pose = self.get_start_pose()
-        if start_pose is None:
-            return
-        if not self.is_near_rotation_zone(start_pose):
-            return
-
-        goal = self.pending_goal
-        self.pending_goal = None
-        self.get_logger().info('Reached rotation zone; publishing final path to goal.')
-        self.plan_to_goal(start_pose, goal, ignore_rotation_constraint=True)
-
-    def is_near_rotation_zone(self, pose):
-        # 当前示例只有一个圆形可旋转区。后续接入 mask 或多边形区域时，
+    def is_near_turnaround_zone(self, pose):
+        # 当前示例只有一个圆形掉头区。后续接入 mask 或多边形区域时，
         # 可以优先替换这个函数，而不用改 A* 搜索主体。
-        if self.rotation_zone_pose is None:
+        if self.turnaround_zone_pose is None:
             return False
-        dx = pose.position.x - self.rotation_zone_pose.position.x
-        dy = pose.position.y - self.rotation_zone_pose.position.y
-        return math.hypot(dx, dy) <= self.rotation_zone_tolerance
-
-    def heading_from_rotation_zone_to_goal(self, goal_msg):
-        # 回到旋转区时，让车体大致朝向最终目标。这样控制器会在允许旋转的区域
-        # 内完成朝向调整，然后再接收第二段路径。
-        dx = goal_msg.pose.position.x - self.rotation_zone_pose.position.x
-        dy = goal_msg.pose.position.y - self.rotation_zone_pose.position.y
-        if math.hypot(dx, dy) < 1e-6:
-            return yaw_from_quaternion(goal_msg.pose.orientation)
-        return math.atan2(dy, dx)
+        dx = pose.position.x - self.turnaround_zone_pose.position.x
+        dy = pose.position.y - self.turnaround_zone_pose.position.y
+        return math.hypot(dx, dy) <= self.turnaround_zone_tolerance
 
     def get_start_pose(self):
         # 优先使用 TF，因为它反映当前真实/仿真的机器人位姿。如果 TF 不可用，
@@ -495,27 +412,27 @@ class AStarPlannerNode(Node):
             path.poses.append(pose)
         return path
 
-    def publish_rotation_zone_marker(self):
-        # RViz 可视化提示：用一个蓝色半透明圆盘标出当前允许旋转的区域。
+    def publish_turnaround_zone_marker(self):
+        # RViz 可视化提示：用一个蓝色半透明圆盘标出当前允许掉头的区域。
         marker = Marker()
         marker.header.stamp = self.get_clock().now().to_msg()
         marker.header.frame_id = self.map_frame
-        marker.ns = 'rotation_zone'
+        marker.ns = 'turnaround_zone'
         marker.id = 0
         marker.type = Marker.CYLINDER
         marker.action = Marker.ADD
-        marker.pose.position.x = self.rotation_zone_pose.position.x
-        marker.pose.position.y = self.rotation_zone_pose.position.y
+        marker.pose.position.x = self.turnaround_zone_pose.position.x
+        marker.pose.position.y = self.turnaround_zone_pose.position.y
         marker.pose.position.z = 0.03
         marker.pose.orientation.w = 1.0
-        marker.scale.x = self.rotation_zone_tolerance * 2.0
-        marker.scale.y = self.rotation_zone_tolerance * 2.0
+        marker.scale.x = self.turnaround_zone_tolerance * 2.0
+        marker.scale.y = self.turnaround_zone_tolerance * 2.0
         marker.scale.z = 0.04
         marker.color.r = 0.0
         marker.color.g = 0.7
         marker.color.b = 1.0
         marker.color.a = 0.45
-        self.rotation_marker_pub.publish(marker)
+        self.turnaround_marker_pub.publish(marker)
 
 
 def main():

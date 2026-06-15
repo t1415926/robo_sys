@@ -49,6 +49,18 @@ image_to_plane_marker.py          # 将相机图像作为纹理投影到 RViz �
 ./start_astar_planning.sh --build
 ```
 
+A* 示例默认使用 `maps/one_way_road_map.yaml`。这张图把起点附近设计成较宽掉头区，其余区域设计成较窄的单行道路形态：
+
+```bash
+./start_astar_planning.sh --build --goal 2.2 0.0 0.0
+```
+
+指定其他地图：
+
+```bash
+./start_astar_planning.sh --map src/my_robot_navigation/maps/simple_map.yaml
+```
+
 只显示 A* 路径，不跟踪：
 
 ```bash
@@ -59,5 +71,6 @@ image_to_plane_marker.py          # 将相机图像作为纹理投影到 RViz �
 
 - A* 示例不调用 Nav2 `planner_server`。
 - A* 路径通过 `astar_follow_path_bridge.py` 交给 Nav2 `controller_server` 跟踪。
-- 当前旋转区约束只把第一次规划时的机器人起点作为可旋转区域。
-- 后续可以扩展为读取语义 mask 或多边形区域来定义多个可旋转区域。
+- 当前掉头区约束只把第一次规划时的机器人起点作为可掉头区域。
+- 掉头区外不会强制终点原地调整目标朝向，适合窄路示例。
+- 栅格地图本身不表达道路方向；严格单行规则后续需要方向 mask、车道中心线图或拓扑路网。

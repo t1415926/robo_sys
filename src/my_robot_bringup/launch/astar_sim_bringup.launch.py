@@ -12,14 +12,15 @@ def generate_launch_description():
     use_rviz = LaunchConfiguration('use_rviz')
     auto_goal = LaunchConfiguration('auto_goal')
     use_tracking = LaunchConfiguration('use_tracking')
+    map_file = LaunchConfiguration('map')
     goal_x = LaunchConfiguration('goal_x')
     goal_y = LaunchConfiguration('goal_y')
     goal_yaw = LaunchConfiguration('goal_yaw')
 
-    map_file = PathJoinSubstitution([
+    default_map_file = PathJoinSubstitution([
         FindPackageShare('my_robot_navigation'),
         'maps',
-        'simple_map.yaml',
+        'one_way_road_map.yaml',
     ])
 
     robot_description = {
@@ -38,8 +39,9 @@ def generate_launch_description():
         DeclareLaunchArgument('use_rviz', default_value='true'),
         DeclareLaunchArgument('auto_goal', default_value='false'),
         DeclareLaunchArgument('use_tracking', default_value='true'),
+        DeclareLaunchArgument('map', default_value=default_map_file),
         DeclareLaunchArgument('goal_x', default_value='2.2'),
-        DeclareLaunchArgument('goal_y', default_value='1.8'),
+        DeclareLaunchArgument('goal_y', default_value='0.0'),
         DeclareLaunchArgument('goal_yaw', default_value='0.0'),
         Node(
             package='robot_state_publisher',
@@ -134,9 +136,9 @@ def generate_launch_description():
                 'occupied_threshold': 65,
                 'unknown_is_obstacle': True,
                 'allow_diagonal': True,
-                'rotation_constraint_enabled': True,
-                'rotation_yaw_threshold': 0.35,
-                'rotation_zone_tolerance': 0.20,
+                'simplify_path': False,
+                'turnaround_constraint_enabled': True,
+                'turnaround_zone_tolerance': 0.85,
             }],
         ),
         Node(

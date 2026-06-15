@@ -12,6 +12,8 @@ Nav2 全局规划和局部避障
 当前版本不使用雷达模拟，不订阅 `/scan`。路径规划和避障依据已保存的 2D 栅格地图：
 
 ```text
+src/my_robot_navigation/maps/one_way_road_map.yaml
+src/my_robot_navigation/maps/one_way_road_map.pgm
 src/my_robot_navigation/maps/simple_map.yaml
 src/my_robot_navigation/maps/simple_map.pgm
 ```
@@ -194,7 +196,13 @@ cd /home/dtc/robo_sys
 自动发布一个目标点并规划：
 
 ```bash
-./start_astar_planning.sh --goal 2.2 1.8 0.0
+./start_astar_planning.sh --goal 2.2 0.0 0.0
+```
+
+默认地图是 `one_way_road_map.yaml`：起点附近是较宽的掉头区，其余区域是较窄的单行道路形态。也可以指定旧地图或自己绘制的地图：
+
+```bash
+./start_astar_planning.sh --map src/my_robot_navigation/maps/simple_map.yaml
 ```
 
 RViz 中使用 `2D Goal Pose` 工具点目标，A* 路径会显示在 `AStar Path`：
@@ -220,15 +228,15 @@ astar_follow_path_bridge.py     # 自己实现，把 /plan 发送给 FollowPath 
 Nav2 controller_server          # 复用 Nav2 局部轨迹跟踪，输出 /cmd_vel
 ```
 
-旋转受限示例：
+掉头区简化示例：
 
 ```text
-首次规划时的机器人起点会被记录为可旋转区域
-如果后续目标朝向变化超过阈值，A* 会先规划回该旋转区域
-到达旋转区域后，再自动发布去最终目标的路径
+首次规划时的机器人起点会被记录为掉头区
+掉头区内允许使用目标点朝向
+掉头区外的窄路目标不会强制终点原地转向，而是沿路径方向停车
 ```
 
-RViz 中 `Rotation Zones` 会显示当前可旋转区域。当前只是初版约束示例，后续可以扩展为多块可旋转区域 mask。
+RViz 中 `Turnaround Zones` 会显示当前掉头区。当前栅格地图只表达占据/空闲，不表达道路方向；这里先用窄路几何和终点朝向处理模拟单行道路形态。后续如果要严格限制逆行，可以扩展方向 mask、车道中心线图或拓扑路网。
 
 ## 启动 Gazebo 全向底盘导航
 
@@ -358,7 +366,7 @@ RViz2 的 Fixed Frame 已设置为 `map`。
 
 由于当前使用静态 `map -> odom` 加全向底盘里程计，不需要点击 `2D Pose Estimate`。直接点击 `Nav2 Goal`，在地图空白区域设置目标点即可。
 
-Nav2 会根据 `simple_map.pgm` 中的障碍物占据栅格自动规划路径，并控制机器人到达目标点。
+Nav2 会根据 `simple_map.pgm` 或指定地图中的障碍物占据栅格自动规划路径，并控制机器人到达目标点。
 
 使用 `Nav2 Goal` 时建议在白色可通行区域点击并拖出朝向箭头；不要点到黑色障碍物、地图边界或地图外。
 

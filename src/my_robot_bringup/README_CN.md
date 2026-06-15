@@ -28,7 +28,13 @@ start_pointlio_nav_bag.sh    # 启动 PointLIO bag 测试链路
 
 ```bash
 cd /home/dtc/robo_sys
-./start_astar_planning.sh --build --goal 1.0 0.8 0.0
+./start_astar_planning.sh --build --goal 2.2 0.0 0.0
+```
+
+A* 示例默认使用窄单行道路形态地图 `one_way_road_map.yaml`。如需切换地图：
+
+```bash
+./start_astar_planning.sh --map src/my_robot_navigation/maps/simple_map.yaml
 ```
 
 ## 设计说明

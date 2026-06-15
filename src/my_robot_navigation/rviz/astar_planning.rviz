@@ -37,13 +37,13 @@ Visualization Manager:
         Value: /plan
     - Class: rviz_default_plugins/Marker
       Enabled: true
-      Name: Rotation Zones
+      Name: Turnaround Zones
       Marker Topic:
         Depth: 10
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /rotation_zones
+        Value: /turnaround_zones
   Enabled: true
   Global Options:
     Fixed Frame: map

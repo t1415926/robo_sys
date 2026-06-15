@@ -9,8 +9,9 @@ USE_TRACKING="${USE_TRACKING:-true}"
 BUILD_MODE="${BUILD_MODE:-auto}"
 AUTO_GOAL="${AUTO_GOAL:-false}"
 GOAL_X="${GOAL_X:-2.2}"
-GOAL_Y="${GOAL_Y:-1.8}"
+GOAL_Y="${GOAL_Y:-0.0}"
 GOAL_YAW="${GOAL_YAW:-0.0}"
+MAP_FILE="${MAP_FILE:-}"
 SYSTEM_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 log() {
@@ -49,12 +50,14 @@ Options:
   --no-tracking    Only publish /plan; do not start Nav2 controller_server.
   --build          Always rebuild before launch.
   --no-build       Do not build, only source install/setup.bash and launch.
+  --map PATH       Use a custom map yaml. Default is one_way_road_map.yaml.
   --goal X Y [YAW] Publish one /goal_pose for A* planning.
   -h, --help       Show this help.
 
 Examples:
   ./start_astar_planning.sh --build
-  ./start_astar_planning.sh --goal 2.2 1.8 0.0
+  ./start_astar_planning.sh --map src/my_robot_navigation/maps/simple_map.yaml
+  ./start_astar_planning.sh --goal 2.2 0.0 0.0
 EOF
 }
 
@@ -75,6 +78,11 @@ while [[ $# -gt 0 ]]; do
     --no-build)
       BUILD_MODE=never
       shift
+      ;;
+    --map)
+      [[ $# -ge 2 ]] || die "--map requires a yaml file path."
+      MAP_FILE="$2"
+      shift 2
       ;;
     --goal)
       [[ $# -ge 3 ]] || die "--goal requires X and Y, with optional YAW."
@@ -141,10 +149,17 @@ source_ros_setup "${PROJECT_DIR}/install/setup.bash"
 
 log "Launching A* planning demo without Nav2 global planner..."
 log "USE_TRACKING=${USE_TRACKING}"
-exec ros2 launch my_robot_bringup astar_sim_bringup.launch.py \
-  use_rviz:="${USE_RVIZ}" \
-  use_tracking:="${USE_TRACKING}" \
-  auto_goal:="${AUTO_GOAL}" \
-  goal_x:="${GOAL_X}" \
-  goal_y:="${GOAL_Y}" \
+launch_args=(
+  use_rviz:="${USE_RVIZ}"
+  use_tracking:="${USE_TRACKING}"
+  auto_goal:="${AUTO_GOAL}"
+  goal_x:="${GOAL_X}"
+  goal_y:="${GOAL_Y}"
   goal_yaw:="${GOAL_YAW}"
+)
+if [[ -n "${MAP_FILE}" ]]; then
+  launch_args+=(map:="${MAP_FILE}")
+  log "MAP_FILE=${MAP_FILE}"
+fi
+
+exec ros2 launch my_robot_bringup astar_sim_bringup.launch.py "${launch_args[@]}"
