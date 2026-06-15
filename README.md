@@ -178,7 +178,7 @@ ros2 launch my_robot_bringup sim_bringup.launch.py
 
 ## 启动 A* 全局规划示例
 
-这个入口不启动 Nav2 的 `planner_server`、`controller_server`、`bt_navigator`，只使用 `map_server` 读取地图，然后由项目内的 A* 节点订阅 `/goal_pose` 并发布 `/plan`。
+这个入口不启动 Nav2 的 `planner_server` 和 `bt_navigator`。全局规划由项目内的 A* 节点完成，轨迹跟踪默认复用 Nav2 `controller_server` 的 `FollowPath` action 输出 `/cmd_vel`。
 
 ```bash
 cd /home/dtc/robo_sys
@@ -197,9 +197,22 @@ RViz 中使用 `2D Goal Pose` 工具点目标，A* 路径会显示在 `AStar Pat
 /map       nav_msgs/OccupancyGrid
 /goal_pose geometry_msgs/PoseStamped
 /plan      nav_msgs/Path
+/cmd_vel   geometry_msgs/Twist 或 TwistStamped，由 Nav2 controller 输出
 ```
 
-当前 A* 示例只做全局路径搜索和显示，不做轨迹跟踪，也不会输出 `/cmd_vel`。
+只显示 A* 路径、不启动轨迹跟踪：
+
+```bash
+./start_astar_planning.sh --no-tracking
+```
+
+当前版本的职责划分：
+
+```text
+A* planner node                 # 自己实现，全局搜索，发布 /plan
+astar_follow_path_bridge.py     # 自己实现，把 /plan 发送给 FollowPath action
+Nav2 controller_server          # 复用 Nav2 局部轨迹跟踪，输出 /cmd_vel
+```
 
 ## 启动 Gazebo 全向底盘导航
 

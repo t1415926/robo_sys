@@ -1,6 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, TimerAction
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -11,6 +11,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_rviz = LaunchConfiguration('use_rviz')
     auto_goal = LaunchConfiguration('auto_goal')
+    use_tracking = LaunchConfiguration('use_tracking')
     goal_x = LaunchConfiguration('goal_x')
     goal_y = LaunchConfiguration('goal_y')
     goal_yaw = LaunchConfiguration('goal_yaw')
@@ -36,6 +37,7 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('use_rviz', default_value='true'),
         DeclareLaunchArgument('auto_goal', default_value='false'),
+        DeclareLaunchArgument('use_tracking', default_value='true'),
         DeclareLaunchArgument('goal_x', default_value='2.2'),
         DeclareLaunchArgument('goal_y', default_value='1.8'),
         DeclareLaunchArgument('goal_yaw', default_value='0.0'),
@@ -80,9 +82,34 @@ def generate_launch_description():
             }],
         ),
         Node(
+            condition=IfCondition(use_tracking),
+            package='nav2_controller',
+            executable='controller_server',
+            name='controller_server',
+            output='screen',
+            parameters=[PathJoinSubstitution([
+                FindPackageShare('my_robot_navigation'),
+                'config',
+                'nav2_params.yaml',
+            ]), {'use_sim_time': use_sim_time}],
+        ),
+        Node(
+            condition=IfCondition(use_tracking),
             package='nav2_lifecycle_manager',
             executable='lifecycle_manager',
-            name='lifecycle_manager_map',
+            name='lifecycle_manager_astar',
+            output='screen',
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'autostart': True,
+                'node_names': ['map_server', 'controller_server'],
+            }],
+        ),
+        Node(
+            condition=UnlessCondition(use_tracking),
+            package='nav2_lifecycle_manager',
+            executable='lifecycle_manager',
+            name='lifecycle_manager_astar_map_only',
             output='screen',
             parameters=[{
                 'use_sim_time': use_sim_time,
@@ -107,6 +134,20 @@ def generate_launch_description():
                 'occupied_threshold': 65,
                 'unknown_is_obstacle': True,
                 'allow_diagonal': True,
+            }],
+        ),
+        Node(
+            condition=IfCondition(use_tracking),
+            package='my_robot_navigation',
+            executable='astar_follow_path_bridge.py',
+            name='astar_follow_path_bridge',
+            output='screen',
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'plan_topic': '/plan',
+                'follow_path_action': 'follow_path',
+                'controller_id': 'FollowPath',
+                'goal_checker_id': 'general_goal_checker',
             }],
         ),
         Node(

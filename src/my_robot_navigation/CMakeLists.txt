@@ -10,6 +10,7 @@ install(
 
 install(
   PROGRAMS
+    scripts/astar_follow_path_bridge.py
     scripts/astar_planner_node.py
     scripts/diff_drive_interface_bridge.py
     scripts/image_to_plane_marker.py

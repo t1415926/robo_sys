@@ -5,6 +5,7 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROS_DISTRO="${ROS_DISTRO:-humble}"
 ROS_SETUP="/opt/ros/${ROS_DISTRO}/setup.bash"
 USE_RVIZ="${USE_RVIZ:-true}"
+USE_TRACKING="${USE_TRACKING:-true}"
 BUILD_MODE="${BUILD_MODE:-auto}"
 AUTO_GOAL="${AUTO_GOAL:-false}"
 GOAL_X="${GOAL_X:-2.2}"
@@ -45,6 +46,7 @@ Usage:
 
 Options:
   --no-rviz        Do not start RViz2.
+  --no-tracking    Only publish /plan; do not start Nav2 controller_server.
   --build          Always rebuild before launch.
   --no-build       Do not build, only source install/setup.bash and launch.
   --goal X Y [YAW] Publish one /goal_pose for A* planning.
@@ -60,6 +62,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-rviz)
       USE_RVIZ=false
+      shift
+      ;;
+    --no-tracking)
+      USE_TRACKING=false
       shift
       ;;
     --build)
@@ -133,9 +139,11 @@ fi
 [[ -f "${PROJECT_DIR}/install/setup.bash" ]] || die "Missing install/setup.bash. Run with --build first."
 source_ros_setup "${PROJECT_DIR}/install/setup.bash"
 
-log "Launching A* planning demo without Nav2 planner/controller..."
+log "Launching A* planning demo without Nav2 global planner..."
+log "USE_TRACKING=${USE_TRACKING}"
 exec ros2 launch my_robot_bringup astar_sim_bringup.launch.py \
   use_rviz:="${USE_RVIZ}" \
+  use_tracking:="${USE_TRACKING}" \
   auto_goal:="${AUTO_GOAL}" \
   goal_x:="${GOAL_X}" \
   goal_y:="${GOAL_Y}" \
