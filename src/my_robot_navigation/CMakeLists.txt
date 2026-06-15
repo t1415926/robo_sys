@@ -12,14 +12,12 @@ install(
   PROGRAMS
     scripts/astar_follow_path_bridge.py
     scripts/astar_planner_node.py
-    scripts/diff_drive_interface_bridge.py
     scripts/image_to_plane_marker.py
     scripts/pointcloud_to_occupancy_grid.py
     scripts/semantic_mask_editor.py
     scripts/send_goal_node.py
     scripts/send_pose_goal_node.py
     scripts/simple_omni_base_node.py
-    scripts/sim_localization_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

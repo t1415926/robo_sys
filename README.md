@@ -44,6 +44,12 @@ docs/nav2_replacement_roadmap.md
 docs/real_lidar_mapping_workflow.md
 ```
 
+各功能包目录下均提供中文说明：
+
+```text
+src/<package_name>/README_CN.md
+```
+
 初版公共接口：
 
 | 话题 / TF | 说明 |
