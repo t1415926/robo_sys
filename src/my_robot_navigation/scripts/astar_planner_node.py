@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""Standalone A* global planner used by the A* demo launch.
+
+This node deliberately does not call Nav2's planner_server. It reads an
+OccupancyGrid, accepts RViz /goal_pose goals, runs grid-based A*, and publishes
+nav_msgs/Path on /plan. A separate bridge node may then hand that /plan to Nav2
+controller_server for FollowPath tracking.
+"""
+
 import heapq
 import math
 
@@ -30,17 +38,32 @@ def normalize_angle(angle):
 class AStarPlannerNode(Node):
     def __init__(self):
         super().__init__('astar_planner_node')
+        # Topic and frame parameters keep the node reusable for both simulation
+        # maps and future SLAM-generated maps.
         self.declare_parameter('map_topic', '/map')
         self.declare_parameter('goal_topic', '/goal_pose')
         self.declare_parameter('plan_topic', '/plan')
         self.declare_parameter('map_frame', 'map')
         self.declare_parameter('base_frame', 'base_footprint')
+
+        # OccupancyGrid values are interpreted as:
+        #   -1: unknown
+        #    0: free
+        #  100: occupied
+        # Values >= occupied_threshold are treated as obstacles.
         self.declare_parameter('occupied_threshold', 65)
         self.declare_parameter('unknown_is_obstacle', True)
         self.declare_parameter('allow_diagonal', True)
+
+        # We inflate obstacles in the A* grid itself so the global path keeps a
+        # basic clearance from walls even before Nav2's local costmap sees it.
         self.declare_parameter('robot_radius', 0.22)
         self.declare_parameter('extra_inflation_radius', 0.05)
         self.declare_parameter('simplify_path', True)
+
+        # Initial implementation of "rotation is only allowed in specific
+        # areas": the first valid robot pose becomes the only rotation zone.
+        # Later this can be replaced with a semantic mask or polygon list.
         self.declare_parameter('rotation_constraint_enabled', True)
         self.declare_parameter('rotation_yaw_threshold', 0.35)
         self.declare_parameter('rotation_zone_tolerance', 0.20)
@@ -50,6 +73,10 @@ class AStarPlannerNode(Node):
         self.blocked = None
         self.last_initial_pose = None
         self.rotation_zone_pose = None
+
+        # When a goal requires rotation while the robot is outside the rotation
+        # zone, we first publish a path back to the zone and store the real goal
+        # here. check_pending_goal() publishes the final path after arrival.
         self.pending_goal = None
 
         self.map_frame = self.get_parameter('map_frame').value
@@ -104,6 +131,9 @@ class AStarPlannerNode(Node):
         )
 
     def map_callback(self, msg):
+        # Rebuild the inflated occupancy grid whenever /map changes. This keeps
+        # the A* planner compatible with both static and dynamically projected
+        # maps.
         self.map_msg = msg
         self.blocked = self.build_blocked_grid(msg)
         self.get_logger().info(
@@ -112,6 +142,8 @@ class AStarPlannerNode(Node):
         )
 
     def initial_pose_callback(self, msg):
+        # Fallback start pose for cases where TF is not available yet. In the
+        # normal sim path, map->odom and odom->base_footprint provide TF.
         self.last_initial_pose = msg.pose.pose
 
     def goal_callback(self, msg):
@@ -128,6 +160,9 @@ class AStarPlannerNode(Node):
             return
 
         if self.rotation_zone_pose is None:
+            # The user asked to use the initial point as a rotation-capable
+            # area. We define that lazily on the first valid planning request so
+            # the pose comes from the same source A* will use for planning.
             self.rotation_zone_pose = start_pose
             self.publish_rotation_zone_marker()
             self.get_logger().info(
@@ -138,6 +173,8 @@ class AStarPlannerNode(Node):
         self.plan_to_goal(start_pose, msg)
 
     def plan_to_goal(self, start_pose, goal_msg, ignore_rotation_constraint=False):
+        # A* operates on integer grid cells. Convert both start and goal from
+        # map-frame meters into OccupancyGrid indices before searching.
         start = self.world_to_cell(start_pose.position.x, start_pose.position.y)
         goal = self.world_to_cell(goal_msg.pose.position.x, goal_msg.pose.position.y)
 
@@ -156,6 +193,11 @@ class AStarPlannerNode(Node):
 
         goal_yaw = yaw_from_quaternion(goal_msg.pose.orientation)
         start_yaw = yaw_from_quaternion(start_pose.orientation)
+
+        # Rotation-area rule:
+        # If the target requires a meaningful yaw change and the robot is not
+        # already in a rotation zone, first route to the initial rotation zone.
+        # Once the robot arrives there, check_pending_goal() sends the real goal.
         if (
             self.rotation_constraint_enabled
             and not ignore_rotation_constraint
@@ -174,6 +216,9 @@ class AStarPlannerNode(Node):
         if bool(self.get_parameter('simplify_path').value):
             cells = self.simplify_cells(cells)
 
+        # Outside rotation zones, do not ask the controller to achieve the final
+        # target yaw. The last pose will inherit the path heading instead. This
+        # keeps rotate-to-goal behavior out of restricted areas.
         final_yaw = goal_yaw
         if self.rotation_constraint_enabled and not self.is_near_rotation_zone(goal_msg.pose):
             final_yaw = None
@@ -185,6 +230,9 @@ class AStarPlannerNode(Node):
         )
 
     def plan_to_rotation_zone_then_wait(self, start_pose, goal_msg):
+        # Publish only the first leg: current pose -> rotation zone. The final
+        # goal is intentionally delayed so Nav2 controller finishes this leg
+        # before receiving the next FollowPath request.
         rotation_cell = self.world_to_cell(
             self.rotation_zone_pose.position.x,
             self.rotation_zone_pose.position.y,
@@ -214,6 +262,9 @@ class AStarPlannerNode(Node):
         return True
 
     def check_pending_goal(self):
+        # Poll robot pose while a delayed goal exists. When the robot reaches the
+        # rotation zone, publish the second leg and ignore the rotation check to
+        # avoid looping back into the same staging behavior.
         if self.pending_goal is None:
             return
         start_pose = self.get_start_pose()
@@ -228,6 +279,8 @@ class AStarPlannerNode(Node):
         self.plan_to_goal(start_pose, goal, ignore_rotation_constraint=True)
 
     def is_near_rotation_zone(self, pose):
+        # The current demo has one circular rotation zone. A future mask-based
+        # implementation can replace this method without touching A* itself.
         if self.rotation_zone_pose is None:
             return False
         dx = pose.position.x - self.rotation_zone_pose.position.x
@@ -235,6 +288,9 @@ class AStarPlannerNode(Node):
         return math.hypot(dx, dy) <= self.rotation_zone_tolerance
 
     def heading_from_rotation_zone_to_goal(self, goal_msg):
+        # When driving back to the rotation zone, face roughly toward the final
+        # goal. This lets the controller rotate in the allowed area before the
+        # second path segment is sent.
         dx = goal_msg.pose.position.x - self.rotation_zone_pose.position.x
         dy = goal_msg.pose.position.y - self.rotation_zone_pose.position.y
         if math.hypot(dx, dy) < 1e-6:
@@ -242,6 +298,9 @@ class AStarPlannerNode(Node):
         return math.atan2(dy, dx)
 
     def get_start_pose(self):
+        # Prefer TF because it reflects the live robot pose. Fall back to the
+        # last RViz initial pose so planning can still be tested in partial
+        # bringups.
         try:
             transform = self.tf_buffer.lookup_transform(
                 self.map_frame,
@@ -258,6 +317,9 @@ class AStarPlannerNode(Node):
             return self.last_initial_pose
 
     def build_blocked_grid(self, msg):
+        # Convert the OccupancyGrid's flat row-major data into a 2D boolean map
+        # and inflate occupied cells by robot radius. True means "A* may not use
+        # this cell".
         width = msg.info.width
         height = msg.info.height
         raw = list(msg.data)
@@ -278,6 +340,9 @@ class AStarPlannerNode(Node):
             return occupied
 
         inflated = [row[:] for row in occupied]
+
+        # Precompute circular inflation offsets in cells. This is simple and
+        # explicit; for larger maps we can optimize with distance transforms.
         offsets = []
         for dy in range(-inflate_cells, inflate_cells + 1):
             for dx in range(-inflate_cells, inflate_cells + 1):
@@ -296,6 +361,8 @@ class AStarPlannerNode(Node):
         return inflated
 
     def world_to_cell(self, wx, wy):
+        # OccupancyGrid origin is the lower-left map pose. We plan in cell
+        # centers but use floor() here to find the containing cell.
         info = self.map_msg.info
         mx = int(math.floor((wx - info.origin.position.x) / info.resolution))
         my = int(math.floor((wy - info.origin.position.y) / info.resolution))
@@ -304,6 +371,7 @@ class AStarPlannerNode(Node):
         return None
 
     def cell_to_world(self, mx, my):
+        # Convert a grid index back to the center point of that cell in meters.
         info = self.map_msg.info
         return (
             info.origin.position.x + (mx + 0.5) * info.resolution,
@@ -314,6 +382,8 @@ class AStarPlannerNode(Node):
         return self.blocked[my][mx]
 
     def astar(self, start, goal):
+        # Standard A*: open_heap stores (f_score, g_score, cell). best_cost
+        # prevents revisiting cells through more expensive routes.
         open_heap = []
         heapq.heappush(open_heap, (0.0, 0.0, start))
         came_from = {}
@@ -341,6 +411,8 @@ class AStarPlannerNode(Node):
         return []
 
     def neighbors(self, cell):
+        # Generate 4- or 8-connected neighbors. Diagonal corner-cutting is
+        # blocked so the path cannot slip between two inflated obstacle cells.
         x, y = cell
         motions = [
             (1, 0, 1.0),
@@ -382,6 +454,8 @@ class AStarPlannerNode(Node):
 
     @staticmethod
     def simplify_cells(cells):
+        # Compress straight runs into just their turning points. This keeps RViz
+        # and FollowPath goals readable while preserving the same polyline.
         if len(cells) <= 2:
             return cells
         simplified = [cells[0]]
@@ -401,6 +475,8 @@ class AStarPlannerNode(Node):
         return simplified
 
     def cells_to_path(self, cells, final_yaw=None):
+        # Publish a normal nav_msgs/Path so RViz can display it and the bridge
+        # can send it to Nav2 controller_server's FollowPath action.
         path = Path()
         path.header.stamp = self.get_clock().now().to_msg()
         path.header.frame_id = self.map_frame
@@ -430,6 +506,8 @@ class AStarPlannerNode(Node):
         return path
 
     def publish_rotation_zone_marker(self):
+        # Visual hint in RViz: a blue translucent disk marks where rotation is
+        # allowed in this first implementation.
         marker = Marker()
         marker.header.stamp = self.get_clock().now().to_msg()
         marker.header.frame_id = self.map_frame
