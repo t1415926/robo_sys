@@ -199,7 +199,7 @@ cd /home/dtc/robo_sys
 ./start_astar_planning.sh --goal 2.2 0.0 0.0
 ```
 
-默认地图是 `one_way_road_map.yaml`：起点附近是较宽的掉头区，其余区域是较窄的单行道路形态。也可以指定旧地图或自己绘制的地图：
+默认地图是 `one_way_road_map.yaml`：起点附近是较宽的掉头区，其余区域是较窄的单行道路形态。当前窄路通道约 0.64 m 宽，拐角处保留少量圆角余量，用于模拟更接近真实现场的狭窄道路。也可以指定旧地图或自己绘制的地图：
 
 ```bash
 ./start_astar_planning.sh --map src/my_robot_navigation/maps/simple_map.yaml
@@ -226,6 +226,21 @@ RViz 中使用 `2D Goal Pose` 工具点目标，A* 路径会显示在 `AStar Pat
 A* planner node                 # 自己实现，全局搜索，发布 /plan
 astar_follow_path_bridge.py     # 自己实现，把 /plan 发送给 FollowPath action
 Nav2 controller_server          # 复用 Nav2 局部轨迹跟踪，输出 /cmd_vel
+```
+
+窄路和过弯优化：
+
+```text
+A* 硬约束：按机器人半径膨胀障碍物，保证路径不穿墙
+A* 软约束：离障碍越近代价越高，路径会尽量回到道路中线
+A* 转弯代价：减少格子抖动和贴角路径，过弯更平顺
+FollowPath：降低速度、缩短 DWB 预测时间、减小局部 costmap 膨胀半径
+```
+
+可用于测试过弯的自动目标：
+
+```bash
+./start_astar_planning.sh --goal 3.0 1.5 1.57
 ```
 
 掉头区简化示例：

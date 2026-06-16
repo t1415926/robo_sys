@@ -31,10 +31,16 @@ cd /home/dtc/robo_sys
 ./start_astar_planning.sh --build --goal 2.2 0.0 0.0
 ```
 
-A* 示例默认使用窄单行道路形态地图 `one_way_road_map.yaml`。如需切换地图：
+A* 示例默认使用窄单行道路形态地图 `one_way_road_map.yaml`。当前启动参数已经针对窄路过弯做了 A* 中线偏好和 DWB 低速跟踪调参。如需切换地图：
 
 ```bash
 ./start_astar_planning.sh --map src/my_robot_navigation/maps/simple_map.yaml
+```
+
+测试过弯目标：
+
+```bash
+./start_astar_planning.sh --goal 3.0 1.5 1.57
 ```
 
 ## 设计说明

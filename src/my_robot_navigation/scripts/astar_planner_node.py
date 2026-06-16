@@ -55,6 +55,9 @@ class AStarPlannerNode(Node):
         self.declare_parameter('robot_radius', 0.22)
         self.declare_parameter('extra_inflation_radius', 0.05)
         self.declare_parameter('simplify_path', True)
+        self.declare_parameter('obstacle_cost_weight', 0.8)
+        self.declare_parameter('preferred_clearance', 0.35)
+        self.declare_parameter('turn_cost_weight', 0.20)
 
         # 掉头区简化模型：第一次有效机器人位姿会成为唯一掉头点。窄路区域
         # 仍然可以正常行驶，但不要求机器人在终点原地调整目标朝向。
@@ -64,6 +67,7 @@ class AStarPlannerNode(Node):
 
         self.map_msg = None
         self.blocked = None
+        self.obstacle_distance = None
         self.last_initial_pose = None
         self.turnaround_zone_pose = None
 
@@ -74,6 +78,9 @@ class AStarPlannerNode(Node):
         self.allow_diagonal = bool(self.get_parameter('allow_diagonal').value)
         self.robot_radius = float(self.get_parameter('robot_radius').value)
         self.extra_inflation_radius = float(self.get_parameter('extra_inflation_radius').value)
+        self.obstacle_cost_weight = float(self.get_parameter('obstacle_cost_weight').value)
+        self.preferred_clearance = float(self.get_parameter('preferred_clearance').value)
+        self.turn_cost_weight = float(self.get_parameter('turn_cost_weight').value)
         self.turnaround_constraint_enabled = bool(
             self.get_parameter('turnaround_constraint_enabled').value
         )
@@ -120,7 +127,9 @@ class AStarPlannerNode(Node):
         # 每次 /map 更新都重建膨胀后的障碍栅格。这样既支持静态地图，也支持
         # 点云实时投影生成的动态地图。
         self.map_msg = msg
-        self.blocked = self.build_blocked_grid(msg)
+        occupied = self.build_occupied_grid(msg)
+        self.blocked = self.inflate_obstacles(occupied, msg)
+        self.obstacle_distance = self.build_obstacle_distance_grid(occupied, msg)
         self.get_logger().info(
             f'Received map: {msg.info.width}x{msg.info.height}, '
             f'{msg.info.resolution:.3f} m/cell'
@@ -224,9 +233,9 @@ class AStarPlannerNode(Node):
         except TransformException:
             return self.last_initial_pose
 
-    def build_blocked_grid(self, msg):
-        # 把 OccupancyGrid 的一维行优先数据转成二维布尔栅格，并按机器人半径
-        # 膨胀障碍物。True 表示 A* 不能使用该格子。
+    def build_occupied_grid(self, msg):
+        # 把 OccupancyGrid 的一维行优先数据转成二维布尔栅格。True 表示原始
+        # 地图中该格子是障碍或未知区域。
         width = msg.info.width
         height = msg.info.height
         raw = list(msg.data)
@@ -240,7 +249,12 @@ class AStarPlannerNode(Node):
                     occupied[y][x] = self.unknown_is_obstacle
                 else:
                     occupied[y][x] = value >= self.occupied_threshold
+        return occupied
 
+    def inflate_obstacles(self, occupied, msg):
+        # 按机器人半径膨胀障碍物，生成 A* 的硬约束栅格。True 表示不能通行。
+        width = msg.info.width
+        height = msg.info.height
         inflation_m = self.robot_radius + self.extra_inflation_radius
         inflate_cells = int(math.ceil(inflation_m / max(msg.info.resolution, 1e-6)))
         if inflate_cells <= 0:
@@ -267,6 +281,47 @@ class AStarPlannerNode(Node):
                         inflated[ny][nx] = True
         return inflated
 
+    def build_obstacle_distance_grid(self, occupied, msg):
+        # 多源 Dijkstra 距离场：每个空闲格子记录到最近原始障碍的距离。A*
+        # 用它作为软代价，让路径主动靠近窄路中心，而不是贴着墙走。
+        width = msg.info.width
+        height = msg.info.height
+        resolution = msg.info.resolution
+        distances = [[float('inf') for _ in range(width)] for _ in range(height)]
+        queue = []
+
+        for y in range(height):
+            for x in range(width):
+                if occupied[y][x]:
+                    distances[y][x] = 0.0
+                    heapq.heappush(queue, (0.0, x, y))
+
+        motions = [
+            (1, 0, resolution),
+            (-1, 0, resolution),
+            (0, 1, resolution),
+            (0, -1, resolution),
+            (1, 1, resolution * math.sqrt(2.0)),
+            (1, -1, resolution * math.sqrt(2.0)),
+            (-1, 1, resolution * math.sqrt(2.0)),
+            (-1, -1, resolution * math.sqrt(2.0)),
+        ]
+
+        while queue:
+            distance, x, y = heapq.heappop(queue)
+            if distance > distances[y][x]:
+                continue
+            for dx, dy, step in motions:
+                nx = x + dx
+                ny = y + dy
+                if not (0 <= nx < width and 0 <= ny < height):
+                    continue
+                new_distance = distance + step
+                if new_distance < distances[ny][nx]:
+                    distances[ny][nx] = new_distance
+                    heapq.heappush(queue, (new_distance, nx, ny))
+        return distances
+
     def world_to_cell(self, wx, wy):
         # OccupancyGrid 的 origin 是地图左下角位姿。这里用 floor() 找到世界坐标
         # 所在的格子，后续发布路径时再使用格子中心点。
@@ -292,30 +347,42 @@ class AStarPlannerNode(Node):
         # 标准 A*：open_heap 中保存 (f_score, g_score, cell)。best_cost 用来
         # 避免用更差的代价重复访问同一个格子。
         open_heap = []
-        heapq.heappush(open_heap, (0.0, 0.0, start))
+        start_state = (start, None)
+        heapq.heappush(open_heap, (0.0, 0.0, start, None))
         came_from = {}
-        best_cost = {start: 0.0}
+        best_cost = {start_state: 0.0}
         closed = set()
+        best_goal_state = None
 
         while open_heap:
-            _priority, cost, current = heapq.heappop(open_heap)
-            if current in closed:
+            _priority, cost, current, previous_direction = heapq.heappop(open_heap)
+            state = (current, previous_direction)
+            if state in closed:
                 continue
             if current == goal:
-                return self.reconstruct_path(came_from, current)
+                best_goal_state = state
+                break
 
-            closed.add(current)
-            for neighbor, step_cost in self.neighbors(current):
-                if neighbor in closed:
+            closed.add(state)
+            for neighbor, step_cost, direction in self.neighbors(current):
+                neighbor_state = (neighbor, direction)
+                if neighbor_state in closed:
                     continue
-                new_cost = cost + step_cost
-                if new_cost >= best_cost.get(neighbor, float('inf')):
+                new_cost = (
+                    cost
+                    + step_cost
+                    + self.clearance_cost(neighbor, step_cost)
+                    + self.turn_cost(previous_direction, direction)
+                )
+                if new_cost >= best_cost.get(neighbor_state, float('inf')):
                     continue
-                best_cost[neighbor] = new_cost
-                came_from[neighbor] = current
+                best_cost[neighbor_state] = new_cost
+                came_from[neighbor_state] = state
                 priority = new_cost + self.heuristic(neighbor, goal)
-                heapq.heappush(open_heap, (priority, new_cost, neighbor))
-        return []
+                heapq.heappush(open_heap, (priority, new_cost, neighbor, direction))
+        if best_goal_state is None:
+            return []
+        return self.reconstruct_path(came_from, best_goal_state)
 
     def neighbors(self, cell):
         # 生成 4 邻接或 8 邻接候选格子。对角移动时禁止“切角”，避免路径从两个
@@ -344,18 +411,40 @@ class AStarPlannerNode(Node):
             if 0 <= nx < width and 0 <= ny < height and not self.is_blocked(nx, ny):
                 if dx != 0 and dy != 0 and (self.is_blocked(x + dx, y) or self.is_blocked(x, y + dy)):
                     continue
-                yield (nx, ny), cost
+                yield (nx, ny), cost, (dx, dy)
+
+    def clearance_cost(self, cell, step_cost):
+        # 离障碍越近代价越高。它不是硬限制，所以窄路仍然可以通过；但只要
+        # 有空间，路径会自然回到道路中线。
+        if self.obstacle_distance is None or self.obstacle_cost_weight <= 0.0:
+            return 0.0
+        distance = self.obstacle_distance[cell[1]][cell[0]]
+        if not math.isfinite(distance) or distance >= self.preferred_clearance:
+            return 0.0
+        clearance_ratio = (self.preferred_clearance - distance) / max(self.preferred_clearance, 1e-6)
+        return self.obstacle_cost_weight * clearance_ratio * clearance_ratio * step_cost
+
+    def turn_cost(self, previous_direction, direction):
+        # 对急转弯加软代价，减少 A* 在格子边缘抖动，拐角处更倾向选择平顺路线。
+        if previous_direction is None or self.turn_cost_weight <= 0.0:
+            return 0.0
+        if previous_direction == direction:
+            return 0.0
+        prev_angle = math.atan2(previous_direction[1], previous_direction[0])
+        next_angle = math.atan2(direction[1], direction[0])
+        angle_delta = abs(math.atan2(math.sin(next_angle - prev_angle), math.cos(next_angle - prev_angle)))
+        return self.turn_cost_weight * (angle_delta / math.pi)
 
     @staticmethod
     def heuristic(cell, goal):
         return math.hypot(goal[0] - cell[0], goal[1] - cell[1])
 
     @staticmethod
-    def reconstruct_path(came_from, current):
-        path = [current]
-        while current in came_from:
-            current = came_from[current]
-            path.append(current)
+    def reconstruct_path(came_from, current_state):
+        path = [current_state[0]]
+        while current_state in came_from:
+            current_state = came_from[current_state]
+            path.append(current_state[0])
         path.reverse()
         return path
 
