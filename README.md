@@ -228,6 +228,14 @@ astar_follow_path_bridge.py     # 自己实现，把 /plan 发送给 FollowPath 
 Nav2 controller_server          # 复用 Nav2 局部轨迹跟踪，输出 /cmd_vel
 ```
 
+差速底盘约束：
+
+```text
+DWB 不采样横向速度，min_vel_y=max_vel_y=0
+仿真底盘默认 holonomic=false，会忽略 cmd_vel.linear.y
+机器人只能通过 linear.x 和 angular.z 前进/转向，不再斜着横移
+```
+
 窄路和过弯优化：
 
 ```text

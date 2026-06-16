@@ -77,6 +77,7 @@ A* 示例默认使用 `maps/one_way_road_map.yaml`。这张图把起点附近设
 
 - A* 示例不调用 Nav2 `planner_server`。
 - A* 路径通过 `astar_follow_path_bridge.py` 交给 Nav2 `controller_server` 跟踪。
+- 当前 A* 示例按差速底盘配置，DWB 不采样横向速度，底盘节点会忽略 `cmd_vel.linear.y`。
 - A* 内部同时使用硬膨胀、离障碍距离软代价和转弯代价，让窄路路径尽量走中线。
 - Nav2 `controller_server` 使用较低速度、较短 DWB 预测时间和较小 costmap 膨胀半径，降低拐角卡住概率。
 - 当前掉头区约束只把第一次规划时的机器人起点作为可掉头区域。

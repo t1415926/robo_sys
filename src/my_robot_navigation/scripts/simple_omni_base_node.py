@@ -31,10 +31,12 @@ class SimpleOmniBaseNode(Node):
         self.declare_parameter('initial_x', 0.0)
         self.declare_parameter('initial_y', 0.0)
         self.declare_parameter('initial_yaw', 0.0)
+        self.declare_parameter('holonomic', False)
 
         self.odom_frame = self.get_parameter('odom_frame').value
         self.base_frame = self.get_parameter('base_frame').value
         self.cmd_timeout = float(self.get_parameter('cmd_timeout').value)
+        self.holonomic = bool(self.get_parameter('holonomic').value)
 
         self.x = float(self.get_parameter('initial_x').value)
         self.y = float(self.get_parameter('initial_y').value)
@@ -78,7 +80,9 @@ class SimpleOmniBaseNode(Node):
 
     def set_command(self, msg):
         self.vx = msg.linear.x
-        self.vy = msg.linear.y
+        # 差速底盘不能横向平移。保留 holonomic 参数，后续如果需要全向底盘
+        # 测试，可以在 launch 中显式打开。
+        self.vy = msg.linear.y if self.holonomic else 0.0
         self.wz = msg.angular.z
         self.last_cmd_time = self.get_clock().now()
 

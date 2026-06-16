@@ -19,7 +19,7 @@ controller_server:
     use_sim_time: false
     controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
-    min_y_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.5
     min_theta_velocity_threshold: 0.001
     failure_tolerance: 0.3
     progress_checker_plugin: "progress_checker"
@@ -41,21 +41,21 @@ controller_server:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: false
       min_vel_x: -0.25
-      min_vel_y: -0.25
+      min_vel_y: 0.0
       max_vel_x: 0.25
-      max_vel_y: 0.25
+      max_vel_y: 0.0
       max_vel_theta: 0.6
       min_speed_xy: 0.0
       max_speed_xy: 0.25
       min_speed_theta: 0.0
       acc_lim_x: 0.35
-      acc_lim_y: 0.35
+      acc_lim_y: 0.0
       acc_lim_theta: 0.8
       decel_lim_x: -0.35
-      decel_lim_y: -0.35
+      decel_lim_y: 0.0
       decel_lim_theta: -0.8
       vx_samples: 16
-      vy_samples: 16
+      vy_samples: 1
       vtheta_samples: 16
       sim_time: 0.9
       linear_granularity: 0.05

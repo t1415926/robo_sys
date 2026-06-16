@@ -71,6 +71,7 @@ def generate_launch_description():
                 'odom_topic': '/odom',
                 'publish_rate': 50.0,
                 'cmd_timeout': 0.5,
+                'holonomic': False,
             }],
         ),
         Node(
