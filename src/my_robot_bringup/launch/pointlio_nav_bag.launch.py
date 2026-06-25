@@ -90,7 +90,7 @@ def generate_launch_description():
             'params_file': PathJoinSubstitution([
                 FindPackageShare('my_robot_navigation'),
                 'config',
-                'nav2_params.yaml',
+                'nav2_pointcloud_params.yaml',
             ]),
         }.items(),
     )

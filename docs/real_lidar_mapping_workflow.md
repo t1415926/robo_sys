@@ -217,7 +217,23 @@ mkdir -p /home/dtc/robo_sys/src/pointlio/PCD
 
 ### 阶段 3：生成 2D 栅格地图
 
-当前项目已有实时点云投影节点：
+当前项目已有两种生成 2D 栅格地图的方式。
+
+离线 PCD 转 Nav2 地图：
+
+```bash
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 run my_robot_navigation pcd_to_grid_map.py \
+  /home/dtc/robo_sys/src/pointlio/PCD/scans.pcd \
+  --output-prefix /home/dtc/robo_sys/src/my_robot_navigation/maps/real_site_map \
+  --resolution 0.05 \
+  --min-z 0.05 \
+  --max-z 1.50 \
+  --inflate-radius 0.15
+```
+
+实时点云投影节点：
 
 ```text
 src/my_robot_navigation/scripts/pointcloud_to_occupancy_grid.py
@@ -243,7 +259,7 @@ max_z: 保留机器人会撞到的障碍，忽略天花板、横梁上方点
 
 如果地面点很多导致地图被涂黑，先增大 `min_z`。如果桌面、柜子等障碍没有进入地图，降低 `max_z` 或检查点云坐标系 z 方向。
 
-保存 2D 地图：
+实时 `/Laser_map -> /map` 时，也可以再用 map_saver 保存当前 2D 地图：
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -258,6 +274,40 @@ ros2 run nav2_map_server map_saver_cli \
 src/my_robot_navigation/maps/real_site_map.yaml
 src/my_robot_navigation/maps/real_site_map.pgm
 ```
+
+## 实时点云避障
+
+PointLIO 会发布两类点云：
+
+```text
+/Laser_map          累计地图点云，适合投影成全局 /map
+/cloud_registered   当前帧配准到 map 坐标系后的点云，适合 local costmap 实时标记障碍
+```
+
+项目中新增了 `nav2_pointcloud_params.yaml`。`pointlio_nav_bag.launch.py` 默认使用该参数文件：
+
+```text
+local_costmap:
+  plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+  obstacle_layer:
+    observation_sources: registered_cloud
+    registered_cloud:
+      topic: /cloud_registered
+      data_type: PointCloud2
+      marking: true
+      clearing: false
+      min_obstacle_height: 0.05
+      max_obstacle_height: 1.50
+      obstacle_max_range: 4.0
+      observation_persistence: 0.3
+```
+
+说明：
+
+- `/cloud_registered` 用于局部实时障碍标记，减少动态障碍对全局地图的污染。
+- 当前先只做 marking，不做 clearing；移动障碍主要依赖较短 `observation_persistence` 自然过期。
+- `/Laser_map` 仍用于构建或更新全局 `/map`。
+- 上车前要根据雷达高度、车体高度和地面噪声调 `min_obstacle_height`、`max_obstacle_height`、`obstacle_max_range`。
 
 ## 地图人工修整
 
@@ -474,7 +524,7 @@ RViz 中检查：
 
 ```text
 scripts/filter_pcd_for_navigation.py      # PCD 裁剪、降采样、去离群点
-scripts/pcd_to_grid_map.py                # 离线 PCD 转 map.yaml + map.pgm
+scripts/pcd_to_grid_map.py                # 已实现：离线 PCD 转 map.yaml + map.pgm
 scripts/edit_grid_map.py                  # 批量膨胀/腐蚀/清理小噪声
 launch/real_lidar_mapping.launch.py       # 真实雷达驱动 + PointLIO + RViz
 launch/real_lidar_nav.launch.py           # 静态修整地图 + 定位 + Nav2

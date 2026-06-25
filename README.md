@@ -111,6 +111,20 @@ src/pointlio
 src/livox_ros_driver2
 ```
 
+离线 PCD 转 2D 栅格地图工具：
+
+```bash
+ros2 run my_robot_navigation pcd_to_grid_map.py \
+  /home/dtc/robo_sys/src/pointlio/PCD/scans.pcd \
+  --output-prefix /home/dtc/robo_sys/src/my_robot_navigation/maps/real_site_map \
+  --resolution 0.05 \
+  --min-z 0.05 \
+  --max-z 1.50 \
+  --inflate-radius 0.15
+```
+
+PointLIO bag/真实雷达导航链路使用 `nav2_pointcloud_params.yaml`：`/Laser_map` 投影成全局 `/map`，`/cloud_registered` 进入 Nav2 local costmap 的点云障碍层，用于实时障碍标记。
+
 ## 编译
 
 在项目根目录执行：

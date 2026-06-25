@@ -13,6 +13,8 @@ launch/gazebo_omni_bringup.launch.py   # Gazebo 全向底盘仿真 + Nav2
 launch/pointlio_nav_bag.launch.py      # PointLIO bag 建图/投影地图 + Nav2 规划
 ```
 
+`pointlio_nav_bag.launch.py` 默认使用 `my_robot_navigation/config/nav2_pointcloud_params.yaml`，local costmap 会订阅 `/cloud_registered` 作为实时点云障碍层；`/Laser_map` 仍通过投影节点生成全局 `/map`。
+
 ## 常用脚本
 
 项目根目录提供了一键脚本：

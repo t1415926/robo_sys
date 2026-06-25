@@ -31,9 +31,24 @@ astar_follow_path_bridge.py       # 把 A* 的 /plan 发送给 Nav2 controller_s
 send_pose_goal_node.py            # A* 示例用的 /goal_pose 自动发布节点
 send_goal_node.py                 # Nav2 NavigateToPose 自动目标点发送节点
 pointcloud_to_occupancy_grid.py   # /Laser_map 点云投影成 /map 栅格
+pcd_to_grid_map.py                # 离线 PCD 点云投影成 Nav2 map.pgm/map.yaml
 semantic_mask_editor.py           # 红/绿语义 mask 可视化标注工具
 image_to_plane_marker.py          # 将相机图像作为纹理投影到 RViz 平面 Marker
 ```
+
+离线 PCD 生成 2D 栅格地图：
+
+```bash
+ros2 run my_robot_navigation pcd_to_grid_map.py \
+  /home/dtc/robo_sys/src/pointlio/PCD/scans.pcd \
+  --output-prefix /home/dtc/robo_sys/src/my_robot_navigation/maps/real_site_map \
+  --resolution 0.05 \
+  --min-z 0.05 \
+  --max-z 1.50 \
+  --inflate-radius 0.15
+```
+
+PointLIO 导航链路使用 `config/nav2_pointcloud_params.yaml`，会在 local costmap 中订阅 `/cloud_registered` 作为实时点云障碍层。
 
 ## 常用入口
 
