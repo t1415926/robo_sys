@@ -281,7 +281,7 @@ PointLIO 会发布两类点云：
 
 ```text
 /Laser_map          累计地图点云，适合投影成全局 /map
-/cloud_registered   当前帧配准到 map 坐标系后的点云，适合 local costmap 实时标记障碍
+/cloud_registered_body 当前帧机体系点云，适合 local costmap 实时标记障碍
 ```
 
 项目中新增了 `nav2_pointcloud_params.yaml`。`pointlio_nav_bag.launch.py` 默认使用该参数文件：
@@ -290,9 +290,9 @@ PointLIO 会发布两类点云：
 local_costmap:
   plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
   obstacle_layer:
-    observation_sources: registered_cloud
-    registered_cloud:
-      topic: /cloud_registered
+    observation_sources: body_cloud
+    body_cloud:
+      topic: /cloud_registered_body
       data_type: PointCloud2
       marking: true
       clearing: false
@@ -304,7 +304,9 @@ local_costmap:
 
 说明：
 
-- `/cloud_registered` 用于局部实时障碍标记，减少动态障碍对全局地图的污染。
+- `/cloud_registered_body` 用于局部实时障碍标记，减少动态障碍对全局地图的污染。
+- 该话题的 `frame_id` 是 `body`；当前启动文件先用 `base_footprint -> body` 的单位静态 TF 打通链路。
+- 如果雷达/IMU 机体系与机器人底盘中心不重合，实车上要把这条单位 TF 替换为标定后的外参。
 - 当前先只做 marking，不做 clearing；移动障碍主要依赖较短 `observation_persistence` 自然过期。
 - `/Laser_map` 仍用于构建或更新全局 `/map`。
 - 上车前要根据雷达高度、车体高度和地面噪声调 `min_obstacle_height`、`max_obstacle_height`、`obstacle_max_range`。

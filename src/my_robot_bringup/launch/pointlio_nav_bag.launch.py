@@ -71,6 +71,15 @@ def generate_launch_description():
         parameters=[{'use_sim_time': use_sim_time}],
     )
 
+    base_to_body = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='base_footprint_to_body_static_tf',
+        output='screen',
+        arguments=['--frame-id', 'base_footprint', '--child-frame-id', 'body'],
+        parameters=[{'use_sim_time': use_sim_time}],
+    )
+
     navigation = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -111,6 +120,7 @@ def generate_launch_description():
         DeclareLaunchArgument('goal_y', default_value='0.0'),
         DeclareLaunchArgument('goal_yaw', default_value='0.0'),
         base_to_link,
+        base_to_body,
         pointlio_mapping,
         pointcloud_grid,
         TimerAction(period=4.0, actions=[navigation]),

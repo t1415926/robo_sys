@@ -97,9 +97,9 @@ local_costmap:
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
-        observation_sources: registered_cloud
-        registered_cloud:
-          topic: /cloud_registered
+        observation_sources: body_cloud
+        body_cloud:
+          topic: /cloud_registered_body
           data_type: PointCloud2
           marking: true
           clearing: false

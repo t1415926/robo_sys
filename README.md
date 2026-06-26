@@ -123,7 +123,7 @@ ros2 run my_robot_navigation pcd_to_grid_map.py \
   --inflate-radius 0.15
 ```
 
-PointLIO bag/真实雷达导航链路使用 `nav2_pointcloud_params.yaml`：`/Laser_map` 投影成全局 `/map`，`/cloud_registered` 进入 Nav2 local costmap 的点云障碍层，用于实时障碍标记。
+PointLIO bag/真实雷达导航链路使用 `nav2_pointcloud_params.yaml`：`/Laser_map` 投影成全局 `/map`，`/cloud_registered_body` 进入 Nav2 local costmap 的点云障碍层，用于当前帧实时障碍标记。启动文件会先用静态 TF 假设 `body` 与 `base_footprint` 重合，实车上如果两者不重合，需要替换为标定后的外参。
 
 ## 编译
 

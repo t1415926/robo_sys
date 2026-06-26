@@ -48,7 +48,7 @@ ros2 run my_robot_navigation pcd_to_grid_map.py \
   --inflate-radius 0.15
 ```
 
-PointLIO 导航链路使用 `config/nav2_pointcloud_params.yaml`，会在 local costmap 中订阅 `/cloud_registered` 作为实时点云障碍层。
+PointLIO 导航链路使用 `config/nav2_pointcloud_params.yaml`，会在 local costmap 中订阅 `/cloud_registered_body` 作为实时点云障碍层。该话题是 PointLIO 发布的机体系当前帧点云，适合用于局部避障；全局 `/map` 仍由 `/Laser_map` 投影生成。
 
 ## 常用入口
 
