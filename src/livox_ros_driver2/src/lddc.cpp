@@ -27,7 +27,6 @@
 #include "comm/comm.h"
 
 #include <inttypes.h>
-#include <algorithm>
 #include <iostream>
 #include <iomanip>
 #include <math.h>
@@ -527,21 +526,14 @@ void Lddc::PublishImuData(LidarImuDataQueue& imu_data_queue, const uint8_t index
 #ifdef BUILDING_ROS2
 std::shared_ptr<rclcpp::PublisherBase> Lddc::CreatePublisher(uint8_t msg_type,
     std::string &topic_name, uint32_t queue_size) {
-    auto sensor_qos = rclcpp::SensorDataQoS();
     if (kPointCloud2Msg == msg_type) {
-      const auto qos_depth = std::max<uint32_t>(1, std::min<uint32_t>(queue_size, 5));
-      sensor_qos.keep_last(qos_depth);
       DRIVER_INFO(*cur_node_,
-          "%s publish use PointCloud2 format with sensor QoS depth %u",
-          topic_name.c_str(), qos_depth);
-      return cur_node_->create_publisher<PointCloud2>(topic_name, sensor_qos);
+          "%s publish use PointCloud2 format", topic_name.c_str());
+      return cur_node_->create_publisher<PointCloud2>(topic_name, queue_size);
     } else if (kLivoxCustomMsg == msg_type) {
-      const auto qos_depth = std::max<uint32_t>(1, std::min<uint32_t>(queue_size, 5));
-      sensor_qos.keep_last(qos_depth);
       DRIVER_INFO(*cur_node_,
-          "%s publish use livox custom format with sensor QoS depth %u",
-          topic_name.c_str(), qos_depth);
-      return cur_node_->create_publisher<CustomMsg>(topic_name, sensor_qos);
+          "%s publish use livox custom format", topic_name.c_str());
+      return cur_node_->create_publisher<CustomMsg>(topic_name, queue_size);
     }
 #if 0
     else if (kPclPxyziMsg == msg_type)  {
@@ -551,12 +543,10 @@ std::shared_ptr<rclcpp::PublisherBase> Lddc::CreatePublisher(uint8_t msg_type,
     }
 #endif
     else if (kLivoxImuMsg == msg_type)  {
-      const auto qos_depth = std::max<uint32_t>(1, std::min<uint32_t>(queue_size, 50));
-      sensor_qos.keep_last(qos_depth);
       DRIVER_INFO(*cur_node_,
-          "%s publish use imu format with sensor QoS depth %u",
-          topic_name.c_str(), qos_depth);
-      return cur_node_->create_publisher<ImuMsg>(topic_name, sensor_qos);
+          "%s publish use imu format", topic_name.c_str());
+      return cur_node_->create_publisher<ImuMsg>(topic_name,
+          queue_size);
     } else {
       PublisherPtr null_publisher(nullptr);
       return null_publisher;

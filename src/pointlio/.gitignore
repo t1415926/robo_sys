@@ -1,4 +1,5 @@
 /.idea/
 /cmake-build-debug/
 *.pcd
+*.ply
 /Log/pos_log.csv

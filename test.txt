@@ -1,0 +1,32 @@
+cd /home/nvidia/robo_sys
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
+
+ros2 launch livox_ros_driver2 msg_MID360s_launch.py
+
+
+cd /home/nvidia/robo_sys
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
+
+ros2 run point_lio pointlio_mapping \
+  --ros-args \
+  --params-file /home/nvidia/robo_sys/src/my_robot_bringup/config/pointlio_mid360_nav.yaml \
+  -p use_sim_time:=false \
+  -p common.use_prior_map:=true \
+  -p common.downsample_prior_map:=true \
+  -p pcd_save.pcd_save_en:=false \
+  -p common.prior_map_path:=/home/nvidia/robo_sys/src/pointlio/PCD/2026-06-25_19-00-45_scans.pcd
+
+
+cd /home/nvidia/robo_sys
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 launch bunker_mini_ros2_control can_driver.launch.py \
+  can_interface:=can2 \
+  cmd_vel_topic:=/cmd_vel \
+  max_linear_x:=0.5 \
+  max_angular_z:=0.5

@@ -208,6 +208,57 @@ Set ``` pcd_save_enable ``` in launchfile to ``` 1 ```. All the scans (in global
     5 is intensity
 ```
 
+### 5.6 MID360s prior-map pose graph backend
+
+This branch adds a ROS2 pose graph backend for MID360s localization. The
+frontend Point-LIO can run as local odometry only, while the backend loads a
+prior map, performs fast prior-map initialization with the same KD-tree based
+alignment used by the frontend, and publishes a corrected global pose.
+
+Run the Livox driver first:
+
+```
+    cd /home/dtc/rc2026
+    source /opt/ros/humble/setup.bash
+    source install/setup.bash
+    ros2 launch livox_ros_driver2 msg_MID360s_launch.py
+```
+
+Then run Point-LIO with the backend:
+
+```
+    cd /home/dtc/rc2026
+    source /opt/ros/humble/setup.bash
+    source install/setup.bash
+    ros2 launch point_lio mapping_mid360s_with_pose_graph.launch.py rviz:=true
+```
+
+Important configuration files:
+
+- `config/mid360s_live_frontend_no_prior.yaml`: frontend local odometry only.
+- `config/pose_graph_mid360s.yaml`: backend prior-map initialization, pose graph,
+  loop closure, and corrected pose publishing.
+- `config/mid360s_live_prior_reloc.yaml`: legacy frontend prior-map
+  relocalization mode for comparison.
+
+Backend outputs:
+
+- `/pose_graph/odom`: corrected odometry in the `map` frame.
+- `/pose_graph/path`: optimized keyframe path.
+- `/pose_graph/prior_local_map`: debug local prior map.
+- TF `map -> camera_init`: global correction applied on top of frontend odometry.
+
+The prior map path is configured in `config/pose_graph_mid360s.yaml`, for
+example:
+
+```
+prior:
+    map_path: "/home/dtc/robo_sys/clean_map.pcd"
+```
+
+Large `.pcd` and `.ply` maps are intentionally ignored by git and should be
+provided on the robot separately.
+
 # **6. Examples**
 
 The example datasets could be downloaded through [onedrive](https://connecthkuhk-my.sharepoint.com/:f:/g/personal/hdj65822_connect_hku_hk/EmRJYy4ZfAlMiIJ786ogCPoBcGQ2BAchuXjE5oJQjrQu0Q?e=igu44W). Pay attention that if you want to test on racing_drone.bag, [0.0, 9.810, 0.0] should be input in 'mapping/gravity_init' in avia.yaml, and set the 'start_in_aggressive_motion' as true in the yaml. Because this bag start from a high speed motion. And for PULSAR.bag, we change the measuring range of the gyroscope of the built-in IMU to 17.5 rad/s. Therefore, when you test on this bag, please change 'satu_gyro' to 17.5 in avia.yaml.

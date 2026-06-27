@@ -2,8 +2,8 @@
   ros__parameters:
     use_sim_time: true
     odom_only: false
-    odom_header_frame_id: "map"
-    odom_child_frame_id: "base_footprint"
+    odom_header_frame_id: "camera_init"
+    odom_child_frame_id: "aft_mapped"
     use_imu_as_input: true
     prop_at_freq_of_imu: true
     check_satu: true
@@ -24,9 +24,9 @@
       cut_frame_time_interval: 0.1
       time_lag_imu_to_lidar: 0.0
       use_prior_map: false
-      downsample_prior_map: false
-      prior_map_path: ""
-      yaw_range: [-0.5, 0.05, 0.5]
+      downsample_prior_map: true
+      prior_map_path: "/home/nvidia/robo_sys/clean_map.pcd"
+      yaw_range: [-0.5, 0.1, 0.5]
 
     runtime:
       max_lidar_buffer_size: 0
@@ -55,7 +55,7 @@
       imu_meas_omg_cov: 0.01
       gyr_cov_input: 0.01
       acc_cov_input: 0.1
-      plane_thr: 0.05
+      plane_thr: 0.1
       match_s: 81.0
       fov_degree: 360.0
       det_range: 100.0
@@ -81,11 +81,11 @@
       prior_R: [1.0, 0.0, 0.0,
                 0.0, 1.0, 0.0,
                 0.0, 0.0, 1.0]
-      xy_range: [-0.5, 0.1, 0.5]
-      init_accumulate_frames: 10
+      xy_range: [-0.5, 0.25, 0.5]
+      init_accumulate_frames: 1
       init_voxel_size: 0.03
       init_search_voxel_size: 0.20
-      init_valid_ratio_min: 0.80
+      init_valid_ratio_min: 0.65
       init_translation_converge: 0.03
       init_rotation_converge: 0.05
       init_coarse_max_iter: 10

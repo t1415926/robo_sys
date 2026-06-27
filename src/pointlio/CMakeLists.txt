@@ -48,6 +48,7 @@ find_package(tf2_ros REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(livox_ros_driver2 REQUIRED)
 find_package(fmt REQUIRED)
+find_package(GTSAM REQUIRED)
 
 find_package(Eigen3 REQUIRED)
 
@@ -71,6 +72,7 @@ include_directories(
 # Declare a ROS2 executable
 add_executable(pointlio_mapping src/laserMapping.cpp include/ikd-Tree/ikd_Tree.cpp src/parameters.cpp src/preprocess.cpp src/Estimator.cpp src/scan_aligner.cpp)
 add_executable(post_mapper src/post_mapper.cpp include/ikd-Tree/ikd_Tree.cpp src/parameters.cpp src/preprocess.cpp src/Estimator.cpp src/scan_aligner.cpp)
+add_executable(pose_graph_backend src/pose_graph_backend.cpp include/ikd-Tree/ikd_Tree.cpp src/scan_aligner.cpp)
 ament_target_dependencies(pointlio_mapping
         rclcpp
         rclpy
@@ -95,10 +97,20 @@ ament_target_dependencies(post_mapper
         visualization_msgs
         livox_ros_driver2
 )
+ament_target_dependencies(pose_graph_backend
+        rclcpp
+        geometry_msgs
+        nav_msgs
+        sensor_msgs
+        pcl_ros
+        pcl_conversions
+        tf2_ros
+)
 target_link_libraries(pointlio_mapping ${PYTHON_LIBRARIES}
                        fmt::fmt)
 target_link_libraries(post_mapper ${PYTHON_LIBRARIES}
                        fmt::fmt)
+target_link_libraries(pose_graph_backend gtsam fmt::fmt)
 target_include_directories(pointlio_mapping PRIVATE ${PYTHON_INCLUDE_DIRS})
 target_include_directories(post_mapper PRIVATE ${PYTHON_INCLUDE_DIRS})
 
@@ -106,6 +118,7 @@ target_include_directories(post_mapper PRIVATE ${PYTHON_INCLUDE_DIRS})
 install(TARGETS
         pointlio_mapping
         post_mapper
+        pose_graph_backend
         DESTINATION lib/${PROJECT_NAME}
 )
 
